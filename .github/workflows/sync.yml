@@ -1,4 +1,4 @@
-name: Sync to Hugging Face hub
+name: Sync to Hugging Face Hub
 on:
   push:
     branches: [main]
@@ -11,11 +11,11 @@ jobs:
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
-          lfs: true
       - name: Push to hub
-        uses: nateraw/huggingface-sync-action@v0.0.5
-        with:
-          github_repo_id: BOTManBettingSystems/BOTMan_App
-          huggingface_repo_id: BOTManBettingSystems/Racing_Apps
-          repo_type: space
-          hf_token: ${{ secrets.HF_TOKEN }}
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          git config --global user.email "botman@example.com"
+          git config --global user.name "BOTMan"
+          git remote add hf https://BOTManBettingSystems:$HF_TOKEN@huggingface.co/spaces/BOTManBettingSystems/Racing_Apps
+          git push -f hf main
