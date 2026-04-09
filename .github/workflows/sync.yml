@@ -5,18 +5,15 @@ on:
   workflow_dispatch:
 
 jobs:
-  sync:
+  sync-to-hub:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-        with:
-          fetch-depth: 1 # This is the magic: it ONLY looks at current code files
-      - name: Push to hub
+      - name: Install HF CLI
+        run: pip install -U "huggingface_hub[cli]"
+      - name: Direct Upload to Space
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          git config --global user.email "botman@example.com"
-          git config --global user.name "BOTMan"
-          # Link to your NEW space name here:
-          git remote add hf https://BOTManBettingSystems:$HF_TOKEN@huggingface.co/spaces/BOTManBettingSystems/BOTMan_Version_2
-          git push -f hf main
+          # This command skips Git entirely and just 'uploads' the folder
+          huggingface-cli upload BOTManBettingSystems/BOTMan_Version_2 . . --repo-type space --token $HF_TOKEN
