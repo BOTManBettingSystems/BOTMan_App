@@ -9,11 +9,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - name: Install HF CLI
-        run: pip install -U "huggingface_hub[cli]"
-      - name: Direct Upload to Space
+      - name: Install and Upload
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          # This command skips Git entirely and just 'uploads' the folder
+          # We install and run in the same block so the computer doesn't 'forget' the tool
+          pip install -U huggingface_hub
+          export PATH=$PATH:/home/runner/.local/bin
           huggingface-cli upload BOTManBettingSystems/BOTMan_Version_2 . . --repo-type space --token $HF_TOKEN
