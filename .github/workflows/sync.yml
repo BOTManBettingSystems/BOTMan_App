@@ -1,19 +1,22 @@
-name: Sync to Hugging Face hub
+name: Sync to Hugging Face Hub
 on:
   push:
     branches: [main]
   workflow_dispatch:
 
 jobs:
-  sync-to-hub:
+  sync:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
-          lfs: true
       - name: Push to hub
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          git push -f https://BOTManBettingSystems:$HF_TOKEN@huggingface.co/spaces/BOTManBettingSystems/Racing_Apps main
+          # This installs the HF CLI and mirrors the repo directly
+          pip install -U "huggingface_hub[cli]"
+          hf config login --token $HF_TOKEN
+          hf repo create Racing_Apps --repo-type space --sdk streamlit || true
+          hf upload BOTManBettingSystems/Racing_Apps . . --repo-type space --delete "*"
