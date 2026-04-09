@@ -10,12 +10,16 @@ jobs:
     steps:
       - uses: actions/checkout@v3
         with:
-          fetch-depth: 0
+          fetch-depth: 1 # This ignores ALL history and only grabs current files
       - name: Push to hub
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           git config --global user.email "botman@example.com"
           git config --global user.name "BOTMan"
+          # This creates a brand new temporary history for this push only
+          git init
           git remote add hf https://BOTManBettingSystems:$HF_TOKEN@huggingface.co/spaces/BOTManBettingSystems/Racing_Apps
+          git add .
+          git commit -m "Clean sync"
           git push -f hf main
