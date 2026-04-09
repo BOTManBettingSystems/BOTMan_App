@@ -15,8 +15,7 @@ jobs:
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          # This installs the HF CLI and mirrors the repo directly
           pip install -U "huggingface_hub[cli]"
-          hf config login --token $HF_TOKEN
-          hf repo create Racing_Apps --repo-type space --sdk streamlit || true
-          hf upload BOTManBettingSystems/Racing_Apps . . --repo-type space
+          huggingface-cli login --token $HF_TOKEN
+          # We are uploading the folder contents directly
+          huggingface-cli upload BOTManBettingSystems/Racing_Apps . . --repo-type space
