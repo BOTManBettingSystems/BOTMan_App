@@ -13,7 +13,11 @@ jobs:
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          # We install and run in the same block so the computer doesn't 'forget' the tool
-          pip install -U huggingface_hub
+          # 1. Install the latest HF tool
+          pip install -U "huggingface_hub[cli]"
+          
+          # 2. Add the install folder to the 'Path' so the computer can see it
           export PATH=$PATH:/home/runner/.local/bin
-          huggingface-cli upload BOTManBettingSystems/BOTMan_Version_2 . . --repo-type space --token $HF_TOKEN
+          
+          # 3. Use the new 2026 'hf' command to beam your code over
+          hf upload BOTManBettingSystems/BOTMan_Version_2 . . --repo-type space --token $HF_TOKEN
