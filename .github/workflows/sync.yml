@@ -1,21 +1,21 @@
-name: Sync to Hugging Face Hub
+name: Sync to Hugging Face hub
 on:
   push:
     branches: [main]
   workflow_dispatch:
 
 jobs:
-  sync:
+  sync-to-hub:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
+          lfs: true
       - name: Push to hub
-        env:
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}
-        run: |
-          pip install -U "huggingface_hub[cli]"
-          huggingface-cli login --token $HF_TOKEN
-          # We are uploading the folder contents directly
-          huggingface-cli upload BOTManBettingSystems/Racing_Apps . . --repo-type space
+        uses: nateraw/huggingface-sync-action@v0.0.5
+        with:
+          github_repo_id: BOTManBettingSystems/BOTMan_App
+          huggingface_repo_id: BOTManBettingSystems/Racing_Apps
+          repo_type: space
+          hf_token: ${{ secrets.HF_TOKEN }}
