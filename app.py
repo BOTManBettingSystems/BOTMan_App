@@ -8,10 +8,13 @@ import zipfile
 import gc 
 import json
 import pickle
+import uuid
 from datetime import datetime
 
 # --- 1. PAGE CONFIG ---
 st.set_page_config(page_title="BOTMan Betting Systems", page_icon="BOTManLogo.png", layout="wide", initial_sidebar_state="expanded")
+if "session_id" not in st.session_state:
+    st.session_state.session_id = str(uuid.uuid4())[:6] # Generates a random 6-letter code
 
 # --- 2. ACCESS CONTROL ---
 def check_password():
@@ -23,6 +26,14 @@ def check_password():
         if entered in [admin_p, guest_p]:
             st.session_state["password_correct"] = True
             st.session_state["is_admin"] = (entered == admin_p)
+            
+            # --- UPDATED: Now logs the unique Session ID ---
+            user_type = "Admin" if st.session_state["is_admin"] else "Guest"
+            with open("login_history.csv", "a") as f:
+                f.write(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')},{user_type},Session:{st.session_state.session_id}\n")
+                
+            if "password_input" in st.session_state:
+                del st.session_state["password_input"]
             
             # --- NEW: Append successful login to history file ---
             user_type = "Admin" if st.session_state["is_admin"] else "Guest"
