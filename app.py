@@ -10,7 +10,10 @@ import json
 import pickle
 from datetime import datetime
 
-# --- 1. ACCESS CONTROL ---
+# --- 1. PAGE CONFIG ---
+st.set_page_config(page_title="BOTMan Betting Systems", page_icon="BOTManLogo.png", layout="wide", initial_sidebar_state="expanded")
+
+# --- 2. ACCESS CONTROL ---
 def check_password():
     def password_entered():
         admin_p = st.secrets["ADMIN_PASSWORD"]
@@ -238,7 +241,6 @@ def prep_dashboard_data(_df, _model, feats, perf_mode, d_start, d_end, p_min, p_
 # --- 4. CSS ---
 st.markdown('<style>'
     '.block-container { padding-top: 1.5rem !important; }'
-    'header { visibility: hidden; }'
     '.scrollable-table { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; margin-bottom: 10px; border-radius: 4px; }'
     '.k2-table { border-collapse: collapse !important; width: 100% !important; min-width: 800px; table-layout: fixed !important; margin-bottom: 0px !important; }'
     '.k2-table th, .k2-table td { border: 1px solid #444 !important; padding: 3px 4px !important; font-size: 12.5px !important; white-space: nowrap !important; overflow: hidden !important; text-overflow: ellipsis !important; }'
