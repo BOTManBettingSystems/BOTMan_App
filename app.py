@@ -290,7 +290,7 @@ logo_html = '<img src="data:image/png;base64,' + logo_b64 + '" height="55">' if 
 h_col1, h_col2 = st.columns([4.8, 2.0]) 
 with h_col1:
     res_str = last_live_date.strftime('%d %b %Y').upper() if last_live_date else "08 MAR 2026"
-    header_box = '<div style="display:flex; align-items:center; gap:20px; background-color:#1a3a5f; padding:15px; border-radius:10px; color:white;">' + logo_html + '<div>'
+    header_box = '<div style="display:flex; align-items:center; gap:20px; background-color:#1a3a5f; padding:15px; border-radius:10px; color:white; width: 100%; box-sizing: border-box;">' + logo_html + '<div>'
     header_box += '<div style="font-size:24px; font-weight:bold;">BOTMan Betting Systems</div>'
     header_box += '<div style="margin-top:5px;"><span style="background:#2e7d32; color:white; padding:2px 8px; border-radius:10px; font-size:12px;">✅ LIVE RESULTS TO ' + res_str + '</span></div>'
     header_box += '</div></div>'
