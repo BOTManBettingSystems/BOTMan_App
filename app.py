@@ -463,14 +463,15 @@ else:
                 file_name = f"BOTMan_AIPredictions_{timestamp}.csv"
                 
                 col_dl, col_spacer, col_col = st.columns([1, 3, 0.5])
+                
                 with col_dl:
-                    # Bakes the data in to prevent 404/Cancelled errors
                     st.download_button("Download CSV", csv_out.to_csv(index=False).encode('utf-8'), file_name)
+                
                 with col_col:
                     if st.button("Collapse All"): 
                         st.session_state.expanded_races = set()
                         st.rerun()
-
+                        
                 w = ["10%", "10%", "12%", "31%", "12%", "12%", "8%", "5%"]
                 
                 h_col1, h_col2 = st.columns([19, 1], gap="small")
