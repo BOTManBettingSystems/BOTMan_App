@@ -330,10 +330,19 @@ if st.session_state.get("is_admin") and st.session_state.get("show_admin_insight
     # --- ADMIN INSIGHTS VIEW ---
     st.header("🔍 Admin Data Insights")
     
+    # --- NEW: Keeps the sidebar alive in Admin mode so you aren't trapped ---
+    with st.sidebar:
+        st.markdown("### ⚙️ Admin Mode")
+        st.info("You are currently viewing the Admin Insights panel.")
+        if st.button("🔙 Return to Dashboard", use_container_width=True):
+            st.session_state.show_admin_insights = False
+            st.rerun()
+    
 # --- NEW: LOGIN LOG VIEWER ---
     with st.expander("📋 View Daily App Access Logs", expanded=False):
         if os.path.exists("login_history.csv"):
-            log_df = pd.read_csv("login_history.csv", names=["Date & Time", "User/Session Info"])
+            # UPDATED: Now correctly expects all 3 columns to prevent the crash!
+            log_df = pd.read_csv("login_history.csv", names=["Date & Time", "User Type", "Session ID"])
             st.dataframe(log_df.sort_values(by="Date & Time", ascending=False), use_container_width=True, hide_index=True)
         else:
             st.info("No login history recorded today. Logs clear automatically on Daily Refresh.")
@@ -1325,10 +1334,16 @@ else:
                 # Only include options that exist in the dataframe
                 avail_sorts = [c for c in sort_options if c in race_info.columns]
                 
+                # --- UPDATED: Hooks the dropdowns into Streamlit's long-term memory ---
+                if "race_sort_by" not in st.session_state: st.session_state.race_sort_by = "Pure Rank"
+                if "race_sort_dir" not in st.session_state: st.session_state.race_sort_dir = "Ascending 🔼"
+                
                 with sort_c1:
-                    sort_by = st.selectbox("Sort Table By:", avail_sorts, index=0)
+                    try: default_idx = avail_sorts.index(st.session_state.race_sort_by)
+                    except ValueError: default_idx = 0
+                    sort_by = st.selectbox("Sort Table By:", avail_sorts, index=default_idx, key="race_sort_by")
                 with sort_c2:
-                    sort_dir = st.radio("Order:", ["Ascending 🔼", "Descending 🔽"], horizontal=True)
+                    sort_dir = st.radio("Order:", ["Ascending 🔼", "Descending 🔽"], horizontal=True, key="race_sort_dir")
                 
                 is_asc = True if "Ascending" in sort_dir else False
                 
