@@ -429,12 +429,18 @@ if st.session_state.get("is_admin") and st.session_state.get("show_admin_insight
         st.warning("No data available.")
 
 else:
-    # --- NORMAL DASHBOARD TABS VIEW ---
+    # --- NORMAL DASHBOARD VIEW ---
     with st.sidebar:
         st.markdown("### 🧭 Main Menu")
-        app_mode = st.radio("Navigate to:", ["📅 Daily Predictions", "📊 AI Top 2 Results", "🧠 General Systems", "🛠️ System Builder", "🏇 Race Analysis"])
+        app_mode = st.radio("Navigate to:", [
+            "📅 Daily Predictions", 
+            "📊 AI Top 2 Results", 
+            "🧠 General Systems", 
+            "🛠️ System Builder", 
+            "🏇 Race Analysis"
+        ])
 
-# --- Tab 1: Daily Predictions ---
+# --- Page 1: Daily Predictions ---
     if app_mode == "📅 Daily Predictions":
         st.header("📅 Daily Top 2 Predictions")
         
@@ -445,7 +451,6 @@ else:
                 
                 df_p['Rank'] = df_p.groupby(['Date', 'Time', 'Course'])['ML_Prob'].rank(ascending=False, method='min')
                 
-                # --- RE-ADDED: The missing logic to find the highest 'No. of Top' for the Mauve highlight ---
                 if 'No. of Top' in df_p.columns:
                     df_p['No. of Top'] = pd.to_numeric(df_p['No. of Top'], errors='coerce').fillna(0)
                     df_p['Max_Top'] = df_p.groupby(['Date', 'Time', 'Course'])['No. of Top'].transform('max')
@@ -471,16 +476,16 @@ else:
                     if st.button("Collapse All"): 
                         st.session_state.expanded_races = set()
                         st.rerun()
-                        
+
                 w = ["10%", "10%", "12%", "31%", "12%", "12%", "8%", "5%"]
                 
                 h_col1, h_col2 = st.columns([19, 1], gap="small")
                 with h_col1:
                     header = '<div class="scrollable-table"><table class="k2-table"><thead><tr>'
-                    header += '<th style="width:'+w[0]+';" class="left-head">Date</th><th style="width:'+w[1]+';" class="left-head">Time</th>'
-                    header += '<th style="width:'+w[2]+';" class="left-head">Course</th><th style="width:'+w[3]+';" class="left-head">Horse</th>'
-                    header += '<th style="width:'+w[4]+';" class="left-head">Price</th><th style="width:'+w[5]+';" class="left-head">AI Prob</th>'
-                    header += '<th style="width:'+w[6]+';" class="left-head">Rank</th><th style="width:'+w[7]+';" class="left-head">Tops</th>'
+                    header += f'<th style="width:{w[0]};" class="left-head">Date</th><th style="width:{w[1]};" class="left-head">Time</th>'
+                    header += f'<th style="width:{w[2]};" class="left-head">Course</th><th style="width:{w[3]};" class="left-head">Horse</th>'
+                    header += f'<th style="width:{w[4]};" class="left-head">Price</th><th style="width:{w[5]};" class="left-head">AI Prob</th>'
+                    header += f'<th style="width:{w[6]};" class="left-head">Rank</th><th style="width:{w[7]};" class="left-head">Tops</th>'
                     header += '</tr></thead></table></div>'
                     st.markdown(header, unsafe_allow_html=True)
 
@@ -498,15 +503,15 @@ else:
                             row_cls = "mauve-row" if r['isM'] else ""
                             rv = int(r['Rank'])
                             r_cls = "r1" if rv==1 else "r2" if rv==2 else "r3" if rv==3 else ""
-                            html += '<tr class="'+row_cls+'">'
-                            html += '<td style="width:'+w[0]+';" class="center-text">'+str(r["Date"])+'</td>'
-                            html += '<td style="width:'+w[1]+';" class="center-text">'+str(r["Time"])+'</td>'
-                            html += '<td style="width:'+w[2]+';" class="left-text">'+str(r["Course"])+'</td>'
-                            html += '<td style="width:'+w[3]+';" class="left-text"><b>'+str(r["Horse"])+'</b></td>'
-                            html += '<td style="width:'+w[4]+';" class="center-text">'+str(round(r["7:30AM Price"], 2))+'</td>'
-                            html += '<td style="width:'+w[5]+';" class="center-text">'+str(round(r["ML_Prob"], 4))+'</td>'
-                            html += '<td style="width:'+w[6]+';" class="'+r_cls+' center-text">'+str(rv)+'</td>'
-                            html += '<td style="width:'+w[7]+';" class="center-text">'+str(int(r["No. of Top"]))+'</td>'
+                            html += f'<tr class="{row_cls}">'
+                            html += f'<td style="width:{w[0]};" class="center-text">{r["Date"]}</td>'
+                            html += f'<td style="width:{w[1]};" class="center-text">{r["Time"]}</td>'
+                            html += f'<td style="width:{w[2]};" class="left-text">{r["Course"]}</td>'
+                            html += f'<td style="width:{w[3]};" class="left-text"><b>{r["Horse"]}</b></td>'
+                            html += f'<td style="width:{w[4]};" class="center-text">{round(r["7:30AM Price"], 2)}</td>'
+                            html += f'<td style="width:{w[5]};" class="center-text">{round(r["ML_Prob"], 4)}</td>'
+                            html += f'<td style="width:{w[6]};" class="{r_cls} center-text">{rv}</td>'
+                            html += f'<td style="width:{w[7]};" class="center-text">{int(r["No. of Top"])}</td>'
                             html += '</tr>'
                         st.markdown(html + '</tbody></table></div>', unsafe_allow_html=True)
                     with b_col:
