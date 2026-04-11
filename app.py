@@ -23,6 +23,12 @@ def check_password():
         if entered in [admin_p, guest_p]:
             st.session_state["password_correct"] = True
             st.session_state["is_admin"] = (entered == admin_p)
+            
+            # --- NEW: Append successful login to history file ---
+            user_type = "Admin" if st.session_state["is_admin"] else "Guest"
+            with open("login_history.csv", "a") as f:
+                f.write(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')},{user_type}\n")
+                
             if "password_input" in st.session_state:
                 del st.session_state["password_input"]
         else:
