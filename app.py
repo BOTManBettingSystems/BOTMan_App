@@ -1337,7 +1337,7 @@ else:
 
                 html = '<div class="scrollable-table"><table class="k2-table" style="width:100%; min-width:1400px;"><thead><tr style="background-color: #1a3a5f; color: white;">'
                 
-                # --- UPDATED: Added <br> tags to stack the headers ---
+                # --- UPDATED: Added <br> tags to stack the long headers ---
                 headers = ["Horse", "Value", "7:30am<br>Price", "Speed<br>Rank", "Comb.<br>Rank", "Race<br>Rank", "Race<br>Rating", "Comp.<br>Rank", "PRB<br>Rank"]
                 if show_msai: headers.append("MSAI<br>Rank")
                 
@@ -1346,12 +1346,17 @@ else:
                 if 'No. of Top' in race_df.columns:
                     race_df['No. of Top'] = pd.to_numeric(race_df['No. of Top'], errors='coerce').fillna(0).astype(int)
                 
-                for h in headers: html += f'<th rowspan="2" class="{"left-head" if h == "Horse" else "center-text"}">{h}</th>'
+                for h in headers: 
+                    # --- UPDATED: Give the Horse column a specific width to make it significantly wider ---
+                    col_style = ' style="width: 12%;"' if h == "Horse" else ''
+                    align_class = "left-head" if h == "Horse" else "center-text"
+                    html += f'<th rowspan="2" class="{align_class}"{col_style}>{h}</th>'
                 
                 html += '<th colspan="9" class="center-text" style="border-bottom: 1px dashed #ccc; letter-spacing: 2px; color: #a9bacd;">----------------------- FORM -----------------------</th>'
                 html += '<th rowspan="2" class="center-text" style="background-color: #000;">Pure<br>Rank</th></tr><tr style="background-color: #1a3a5f; color: white;">'
                 
-                for h in ["Ability", "Going", "Distance", "Course/<br>Sim", "Trainer", "Jockey", "Draw", "Speed", "Total"]: html += f'<th class="center-text">{h}</th>'
+                for h in ["Ability", "Going", "Distance", "Course/<br>Sim", "Trainer", "Jockey", "Draw", "Speed", "Total"]: 
+                    html += f'<th class="center-text">{h}</th>'
                 html += '</tr></thead><tbody>'
                 
                 for _, r in race_df.iterrows():
