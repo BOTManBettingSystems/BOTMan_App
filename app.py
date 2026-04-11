@@ -5,7 +5,7 @@ from sklearn.ensemble import HistGradientBoostingClassifier
 import base64
 import os
 import zipfile
-import gc 
+import gc
 import json
 import pickle
 from datetime import datetime
@@ -105,37 +105,37 @@ def load_all_data():
             with open(model_file, 'wb') as f:
                 pickle.dump({'clf': clf, 'shadow_clf': shadow_clf}, f)
         
-            df_today = pd.read_csv("DailyAIPredictionsData.csv") if os.path.exists("DailyAIPredictionsData.csv") else None
-            if df_today is not None:
-                df_today.columns = df_today.columns.str.strip()
-                df_today['No. of Top'] = pd.to_numeric(df_today.get('No. of Top', 0), errors='coerce').fillna(0)
-                df_today['Total'] = pd.to_numeric(df_today.get('Total', 0), errors='coerce').fillna(0)
-                df_today['Primary Rank'] = df_today.groupby(['Time', 'Course'])['No. of Top'].transform(lambda x: x.rank(ascending=False, method='min'))
-                df_today['Form Rank'] = df_today.groupby(['Time', 'Course'])['Total'].transform(lambda x: x.rank(ascending=False, method='min'))
-                if 'MSAI Rank' not in df_today.columns: df_today['MSAI Rank'] = 0
-                df_today['MSAI Rank'] = pd.to_numeric(df_today['MSAI Rank'], errors='coerce').fillna(0)
-                
-                # THE SPEED FIX: Pre-calculate everything here so tabs load instantly
-                missing_feats = [f for f in feats if f not in df_today.columns]
-                if not missing_feats:
-                    df_today['ML_Prob'] = clf.predict_proba(df_today[feats].fillna(0))[:, 1]
-                    df_today['Rank'] = df_today.groupby(['Time', 'Course'])['ML_Prob'].rank(ascending=False, method='min')
-                    df_today['Value Price'] = 1 / df_today['ML_Prob']
-                    
-                    # Pre-calculate pure ranks using the shadow model
-                    missing_shadow = [f for f in shadow_feats if f not in df_today.columns]
-                    if not missing_shadow:
-                        df_today['Shadow_Prob'] = shadow_clf.predict_proba(df_today[shadow_feats].fillna(0))[:, 1]
-                        df_today['Pure Rank'] = df_today.groupby(['Time', 'Course'])['Shadow_Prob'].rank(ascending=False, method='min')
-                    
-                    # Pre-calculate the gap for value finding
-                    df_today['Rank2_Prob'] = df_today.groupby(['Time', 'Course'])['ML_Prob'].transform(lambda x: x.nlargest(2).iloc[-1] if len(x) > 1 else 0)
-                    df_today['Prob Gap'] = df_today['ML_Prob'] - df_today['Rank2_Prob']
-                    
-            last_live = df_live['Date_DT'].max() if (df_live is not None and not df_live.empty) else datetime.now()
-            first_hist = df_historic['Date_DT'].min() if not df_historic.empty else datetime(2024,1,1)
+        df_today = pd.read_csv("DailyAIPredictionsData.csv") if os.path.exists("DailyAIPredictionsData.csv") else None
+        if df_today is not None:
+            df_today.columns = df_today.columns.str.strip()
+            df_today['No. of Top'] = pd.to_numeric(df_today.get('No. of Top', 0), errors='coerce').fillna(0)
+            df_today['Total'] = pd.to_numeric(df_today.get('Total', 0), errors='coerce').fillna(0)
+            df_today['Primary Rank'] = df_today.groupby(['Time', 'Course'])['No. of Top'].transform(lambda x: x.rank(ascending=False, method='min'))
+            df_today['Form Rank'] = df_today.groupby(['Time', 'Course'])['Total'].transform(lambda x: x.rank(ascending=False, method='min'))
+            if 'MSAI Rank' not in df_today.columns: df_today['MSAI Rank'] = 0
+            df_today['MSAI Rank'] = pd.to_numeric(df_today['MSAI Rank'], errors='coerce').fillna(0)
             
-            return clf, feats, shadow_clf, shadow_feats, df_historic, df_live, df_today, last_live, first_hist, df_all
+            # THE SPEED FIX: Pre-calculate everything here so tabs load instantly
+            missing_feats = [f for f in feats if f not in df_today.columns]
+            if not missing_feats:
+                df_today['ML_Prob'] = clf.predict_proba(df_today[feats].fillna(0))[:, 1]
+                df_today['Rank'] = df_today.groupby(['Time', 'Course'])['ML_Prob'].rank(ascending=False, method='min')
+                df_today['Value Price'] = 1 / df_today['ML_Prob']
+                
+                # Pre-calculate pure ranks using the shadow model
+                missing_shadow = [f for f in shadow_feats if f not in df_today.columns]
+                if not missing_shadow:
+                    df_today['Shadow_Prob'] = shadow_clf.predict_proba(df_today[shadow_feats].fillna(0))[:, 1]
+                    df_today['Pure Rank'] = df_today.groupby(['Time', 'Course'])['Shadow_Prob'].rank(ascending=False, method='min')
+                
+                # Pre-calculate the gap for value finding
+                df_today['Rank2_Prob'] = df_today.groupby(['Time', 'Course'])['ML_Prob'].transform(lambda x: x.nlargest(2).iloc[-1] if len(x) > 1 else 0)
+                df_today['Prob Gap'] = df_today['ML_Prob'] - df_today['Rank2_Prob']
+                
+        last_live = df_live['Date_DT'].max() if (df_live is not None and not df_live.empty) else datetime.now()
+        first_hist = df_historic['Date_DT'].min() if not df_historic.empty else datetime(2024,1,1)
+        
+        return clf, feats, shadow_clf, shadow_feats, df_historic, df_live, df_today, last_live, first_hist, df_all
     except Exception as e: return None, str(e), None, None, None, None, None, None, None, None
 
 @st.cache_data(show_spinner=False)
@@ -519,8 +519,8 @@ else:
                             if is_expanded: st.session_state.expanded_races.remove(race_id)
                             else: st.session_state.expanded_races.add(race_id)
                             st.rerun()
-                            
-    # --- TAB 2: DASHBOARD ---
+
+# --- Page 2: Dashboard ---
     elif app_mode == "📊 AI Top 2 Results":
         if "perf_mode" not in st.session_state: st.session_state.perf_mode = "Live"
         st.markdown('<div class="filter-area">', unsafe_allow_html=True)
@@ -613,7 +613,7 @@ else:
                     top_tracks = pd.DataFrame(track_stats).sort_values('ROI%', ascending=False).head(5)
                     st.table(top_tracks.set_index('Course'))
 
- # --- Tab 3: General Systems Dashboard ---
+# --- Page 3: General Systems Dashboard ---
     elif app_mode == "🧠 General Systems":
         st.header("🧠 General Systems")
         
@@ -662,14 +662,12 @@ else:
                                 
                                 if s_data.get('rank_1_only', False): s_mask &= (t_df['Rank'] == 1)
                                 
-                                # --- UPDATED: New Month Filter Logic ---
                                 months = s_data.get('months', ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"])
                                 if len(months) < 12:
                                     month_map = {"Jan": 1, "Feb": 2, "Mar": 3, "Apr": 4, "May": 5, "Jun": 6, "Jul": 7, "Aug": 8, "Sep": 9, "Oct": 10, "Nov": 11, "Dec": 12}
                                     sel_m_nums = [month_map[m] for m in months]
                                     s_mask &= t_df['Date_DT'].dt.month.isin(sel_m_nums)
 
-                                # --- UPDATED: New Value Filter Logic ---
                                 vf = s_data.get('value_filter', "Off")
                                 if vf in ["Value vs 7:30AM Price", "Value vs BSP", "AI Value vs 7:30AM", "AI Value vs BSP"]: 
                                     s_mask &= (t_df['7:30AM Price'] > t_df['Value Price'])
@@ -871,7 +869,7 @@ else:
                 else:
                     st.info("To see live performance tracking, please upload 'BOTManSystemsMaster.ods' to the root folder.")
 
-# --- Tab 4: Mini SYSTEM BUILDER ---
+# --- Page 4: Mini SYSTEM BUILDER ---
     elif app_mode == "🛠️ System Builder":
         # --- NEW: THE DYNAMIC RESET HACK ---
         if "form_reset_counter" not in st.session_state:
@@ -1197,7 +1195,7 @@ else:
                     st.markdown("### Detailed Preview Breakdown")
                     st.markdown(res['breakdown_html'], unsafe_allow_html=True)
     
-   # --- TAB 5: RACE ANALYSIS ---
+# --- Page 5: RACE ANALYSIS ---
     elif app_mode == "🏇 Race Analysis":
         st.header("🏇 Race Analysis")
         
@@ -1210,7 +1208,8 @@ else:
         </style>''', unsafe_allow_html=True)
         
         if df_today is not None and not df_today.empty:
-            ta_df = prep_system_builder_data(df_today, model, feats, shadow_model, shadow_feats, is_live_today=True)
+            # We use the pre-calculated df_today instead of calling prep_system_builder_data again.
+            ta_df = df_today.copy()
             
             ta_df['Time'] = ta_df['Time'].astype(str).str.strip()
             ta_df['Course'] = ta_df['Course'].astype(str).str.strip()
