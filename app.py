@@ -464,8 +464,8 @@ else:
                 
                 col_dl, col_spacer, col_col = st.columns([1, 3, 0.5])
                 with col_dl:
-                # Bakes the data in to prevent 404/Cancelled errors
-                st.download_button("Download CSV", csv_out.to_csv(index=False).encode('utf-8'), file_name)
+                    # Bakes the data in to prevent 404/Cancelled errors
+                    st.download_button("Download CSV", csv_out.to_csv(index=False).encode('utf-8'), file_name)
                 with col_col:
                     if st.button("Collapse All"): 
                         st.session_state.expanded_races = set()
