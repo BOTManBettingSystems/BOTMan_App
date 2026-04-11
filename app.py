@@ -303,6 +303,10 @@ with h_col2:
         c_fast, c_slow = st.columns(2)
         with c_fast:
             if st.button("⚡ Daily Refresh", help="Instantly load new daily runners/systems", use_container_width=True):
+                # Flush the daily access logs
+                if os.path.exists("login_history.csv"):
+                    os.remove("login_history.csv")
+                
                 st.cache_resource.clear()
                 st.cache_data.clear()
                 st.rerun()
@@ -326,18 +330,13 @@ if st.session_state.get("is_admin") and st.session_state.get("show_admin_insight
     # --- ADMIN INSIGHTS VIEW ---
     st.header("🔍 Admin Data Insights")
     
-    # --- NEW: LOGIN LOG VIEWER ---
-    with st.expander("📋 View App Access Logs", expanded=False):
+# --- NEW: LOGIN LOG VIEWER ---
+    with st.expander("📋 View Daily App Access Logs", expanded=False):
         if os.path.exists("login_history.csv"):
-            log_df = pd.read_csv("login_history.csv", names=["Date & Time", "User Type"])
-            # Display the table, sorting so the newest logins are at the top
+            log_df = pd.read_csv("login_history.csv", names=["Date & Time", "User/Session Info"])
             st.dataframe(log_df.sort_values(by="Date & Time", ascending=False), use_container_width=True, hide_index=True)
-            
-            if st.button("🗑️ Clear Logs"):
-                os.remove("login_history.csv")
-                st.rerun()
         else:
-            st.info("No login history recorded yet.")
+            st.info("No login history recorded today. Logs clear automatically on Daily Refresh.")
     st.markdown("---")
             
     st.markdown("### Multi-Factor Analysis")
