@@ -5,7 +5,7 @@ from sklearn.ensemble import HistGradientBoostingClassifier
 import base64
 import os
 import zipfile
-import gc
+import gc 
 import json
 import pickle
 from datetime import datetime
@@ -13,7 +13,6 @@ from datetime import datetime
 # --- 1. ACCESS CONTROL ---
 def check_password():
     def password_entered():
-        # The app now securely fetches passwords from the Streamlit Secrets vault
         admin_p = st.secrets["ADMIN_PASSWORD"]
         guest_p = st.secrets["GUEST_PASSWORD"]
         
@@ -38,13 +37,14 @@ if "show_admin_insights" not in st.session_state:
     st.session_state.show_admin_insights = False
 
 # --- 2. PAGE CONFIG ---
-st.set_page_config(page_title="BOTMan Betting Systems", page_icon="BOTManLogo.png", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="BOTMan Betting Systems", page_icon="BOTManLogo.png", layout="wide", initial_sidebar_state="expanded")
 
 # --- 3. DATA ENGINE ---
 @st.cache_resource(show_spinner=False)
 def load_all_data():
     try:
-        if not os.path.exists("DailyAIResults.zip"): return None, None, None, None, None, None, None, None, None, None
+        if not os.path.exists("DailyAIResults.zip"): 
+            return None, None, None, None, None, None, None, None, None, None
         
         with zipfile.ZipFile("DailyAIResults.zip", 'r') as z:
             csv_name = [f for f in z.namelist() if f.endswith('.csv')][0]
@@ -136,75 +136,15 @@ def load_all_data():
         first_hist = df_historic['Date_DT'].min() if not df_historic.empty else datetime(2024,1,1)
         
         return clf, feats, shadow_clf, shadow_feats, df_historic, df_live, df_today, last_live, first_hist, df_all
-    except Exception as e: return None, str(e), None, None, None, None, None, None, None, None
+    except Exception as e: 
+        print(f"Error loading data: {e}")
+        return None, None, None, None, None, None, None, None, None, None
 
 @st.cache_data(show_spinner=False)
 def load_ods_master():
     if os.path.exists("BOTManSystemsMaster.ods"):
         return pd.read_excel("BOTManSystemsMaster.ods", engine="odf")
     return None
-
-# --- 4. CSS ---
-st.markdown('<style>'
-    '.block-container { padding-top: 1.5rem !important; }'
-    'header { visibility: hidden; }'
-    '.scrollable-table { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; margin-bottom: 10px; border-radius: 4px; }'
-    '.k2-table { border-collapse: collapse !important; width: 100% !important; min-width: 800px; table-layout: fixed !important; margin-bottom: 0px !important; }'
-    '.k2-table th, .k2-table td { border: 1px solid #444 !important; padding: 3px 4px !important; font-size: 12.5px !important; white-space: nowrap !important; overflow: hidden !important; text-overflow: ellipsis !important; }'
-    '.k2-table td.r1 { background-color: #2e7d32 !important; color: white !important; font-weight: bold !important; }'
-    '.k2-table td.r2 { background-color: #fbc02d !important; color: black !important; font-weight: bold !important; }'
-    '.k2-table td.r3 { background-color: #1976d2 !important; color: white !important; font-weight: bold !important; }'
-    '.mauve-row td { background-color: #f3e5f5 !important; color: black !important; }'
-    '.k2-table tr:hover td { background-color: #aec6cf !important; color: black !important; }'
-    '.k2-table thead th { background-color: #000 !important; color: white !important; text-transform: uppercase; letter-spacing: 0.5px; }'
-    '.left-head { text-align: left !important; padding-left: 10px !important; }'
-    '.left-text { text-align: left !important; padding-left: 10px !important; }'
-    '.center-text { text-align: center !important; }'
-    '.pos-val { color: #2e7d32 !important; font-weight: bold !important; }'
-    '.neg-val { color: #d32f2f !important; font-weight: bold !important; }'
-'</style>', unsafe_allow_html=True)
-
-# --- 5. EXECUTION & HEADER ---
-model, feats, shadow_model, shadow_feats, df_hist, df_live, df_today, last_live_date, first_res_date, df_all = load_all_data()
-
-if 'expanded_races' not in st.session_state: st.session_state.expanded_races = set()
-
-logo_b64 = ""
-if os.path.exists("BOTManLogo.png"):
-    with open("BOTManLogo.png", "rb") as f: logo_b64 = base64.b64encode(f.read()).decode()
-logo_html = '<img src="data:image/png;base64,' + logo_b64 + '" height="55">' if logo_b64 else "BOTMan"
-
-h_col1, h_col2 = st.columns([4.8, 2.0]) 
-with h_col1:
-    res_str = last_live_date.strftime('%d %b %Y').upper() if last_live_date else "08 MAR 2026"
-    header_box = '<div style="display:flex; align-items:center; gap:20px; background-color:#1a3a5f; padding:15px; border-radius:10px; color:white;">' + logo_html + '<div>'
-    header_box += '<div style="font-size:24px; font-weight:bold;">BOTMan Betting Systems</div>'
-    header_box += '<div style="margin-top:5px;"><span style="background:#2e7d32; color:white; padding:2px 8px; border-radius:10px; font-size:12px;">✅ LIVE RESULTS TO ' + res_str + '</span></div>'
-    header_box += '</div></div>'
-    st.markdown(header_box, unsafe_allow_html=True)
-
-with h_col2:
-    if st.session_state.get("is_admin"):
-        st.markdown('<div style="margin-top:0px;"></div>', unsafe_allow_html=True) 
-        
-        c_fast, c_slow = st.columns(2)
-        with c_fast:
-            if st.button("⚡ Daily Refresh", help="Instantly load new daily runners/systems", use_container_width=True):
-                st.cache_resource.clear()
-                st.cache_data.clear()
-                st.rerun()
-        with c_slow:
-            if st.button("🧠 Retrain AI", help="Rebuild AI brain after uploading new results (~5m)", use_container_width=True):
-                if os.path.exists("botman_models.pkl"): 
-                    os.remove("botman_models.pkl")
-                st.cache_resource.clear()
-                st.cache_data.clear()
-                st.rerun()
-        
-        btn_label = "🔙 Return to Dashboard" if st.session_state.get("show_admin_insights") else "🔍 Admin Insights"
-        if st.button(btn_label, key="admin_toggle_btn", use_container_width=True):
-            st.session_state.show_admin_insights = not st.session_state.get("show_admin_insights", False)
-            st.rerun()
 
 # --- 6. OPTIMIZATION ENGINE FOR TAB 4 & ADMIN ---
 @st.cache_data(show_spinner=False)
@@ -295,8 +235,76 @@ def prep_dashboard_data(_df, _model, feats, perf_mode, d_start, d_end, p_min, p_
     return res_data
 
 
+# --- 4. CSS ---
+st.markdown('<style>'
+    '.block-container { padding-top: 1.5rem !important; }'
+    'header { visibility: hidden; }'
+    '.scrollable-table { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; margin-bottom: 10px; border-radius: 4px; }'
+    '.k2-table { border-collapse: collapse !important; width: 100% !important; min-width: 800px; table-layout: fixed !important; margin-bottom: 0px !important; }'
+    '.k2-table th, .k2-table td { border: 1px solid #444 !important; padding: 3px 4px !important; font-size: 12.5px !important; white-space: nowrap !important; overflow: hidden !important; text-overflow: ellipsis !important; }'
+    '.k2-table td.r1 { background-color: #2e7d32 !important; color: white !important; font-weight: bold !important; }'
+    '.k2-table td.r2 { background-color: #fbc02d !important; color: black !important; font-weight: bold !important; }'
+    '.k2-table td.r3 { background-color: #1976d2 !important; color: white !important; font-weight: bold !important; }'
+    '.mauve-row td { background-color: #f3e5f5 !important; color: black !important; }'
+    '.k2-table tr:hover td { background-color: #aec6cf !important; color: black !important; }'
+    '.k2-table thead th { background-color: #000 !important; color: white !important; text-transform: uppercase; letter-spacing: 0.5px; }'
+    '.left-head { text-align: left !important; padding-left: 10px !important; }'
+    '.left-text { text-align: left !important; padding-left: 10px !important; }'
+    '.center-text { text-align: center !important; }'
+    '.pos-val { color: #2e7d32 !important; font-weight: bold !important; }'
+    '.neg-val { color: #d32f2f !important; font-weight: bold !important; }'
+'</style>', unsafe_allow_html=True)
+
+
+# --- 5. EXECUTION & HEADER ---
+model, feats, shadow_model, shadow_feats, df_hist, df_live, df_today, last_live_date, first_res_date, df_all = load_all_data()
+
+# --- CRITICAL FIX: Ensure app doesn't crash if data is missing ---
+if model is None:
+    st.error("🚨 Critical Error: Could not load the DailyAIResults.zip data file. Please ensure it is uploaded.")
+    st.stop()
+
+if 'expanded_races' not in st.session_state: st.session_state.expanded_races = set()
+
+logo_b64 = ""
+if os.path.exists("BOTManLogo.png"):
+    with open("BOTManLogo.png", "rb") as f: logo_b64 = base64.b64encode(f.read()).decode()
+logo_html = '<img src="data:image/png;base64,' + logo_b64 + '" height="55">' if logo_b64 else "BOTMan"
+
+h_col1, h_col2 = st.columns([4.8, 2.0]) 
+with h_col1:
+    res_str = last_live_date.strftime('%d %b %Y').upper() if last_live_date else "08 MAR 2026"
+    header_box = '<div style="display:flex; align-items:center; gap:20px; background-color:#1a3a5f; padding:15px; border-radius:10px; color:white;">' + logo_html + '<div>'
+    header_box += '<div style="font-size:24px; font-weight:bold;">BOTMan Betting Systems</div>'
+    header_box += '<div style="margin-top:5px;"><span style="background:#2e7d32; color:white; padding:2px 8px; border-radius:10px; font-size:12px;">✅ LIVE RESULTS TO ' + res_str + '</span></div>'
+    header_box += '</div></div>'
+    st.markdown(header_box, unsafe_allow_html=True)
+
+with h_col2:
+    if st.session_state.get("is_admin"):
+        st.markdown('<div style="margin-top:0px;"></div>', unsafe_allow_html=True) 
+        
+        c_fast, c_slow = st.columns(2)
+        with c_fast:
+            if st.button("⚡ Daily Refresh", help="Instantly load new daily runners/systems", use_container_width=True):
+                st.cache_resource.clear()
+                st.cache_data.clear()
+                st.rerun()
+        with c_slow:
+            if st.button("🧠 Retrain AI", help="Rebuild AI brain after uploading new results (~5m)", use_container_width=True):
+                if os.path.exists("botman_models.pkl"): 
+                    os.remove("botman_models.pkl")
+                st.cache_resource.clear()
+                st.cache_data.clear()
+                st.rerun()
+        
+        btn_label = "🔙 Return to Dashboard" if st.session_state.get("show_admin_insights") else "🔍 Admin Insights"
+        if st.button(btn_label, key="admin_toggle_btn", use_container_width=True):
+            st.session_state.show_admin_insights = not st.session_state.get("show_admin_insights", False)
+            st.rerun()
+
 # -------------------------------------------------------------------------
-# VIEW CONTROLLER: Either show Admin Insights OR the Normal Tabs
+# VIEW CONTROLLER: Either show Admin Insights OR the Normal Sidebar Menu
 # -------------------------------------------------------------------------
 if st.session_state.get("is_admin") and st.session_state.get("show_admin_insights"):
     # --- ADMIN INSIGHTS VIEW ---
