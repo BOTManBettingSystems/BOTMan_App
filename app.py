@@ -1322,28 +1322,33 @@ else:
                     if not is_irish and 'MSAI Rank' in race_info.columns:
                         if pd.to_numeric(race_info['MSAI Rank'], errors='coerce').fillna(0).max() > 0:
                             show_msai = True
-
                 # --- NEW SORTING CONTROLS ---
                 st.markdown("##### ↕️ Sort Race Data")
+                
+                # 1. Create a safe, permanent memory vault for the sort preferences
+                if "saved_sort_by" not in st.session_state: st.session_state.saved_sort_by = "Pure Rank"
+                if "saved_sort_dir" not in st.session_state: st.session_state.saved_sort_dir = "Ascending 🔼"
+                
+                # 2. Function to instantly save user choices to the vault
+                def save_sort_prefs():
+                    st.session_state.saved_sort_by = st.session_state.temp_sort_by
+                    st.session_state.saved_sort_dir = st.session_state.temp_sort_dir
+
                 sort_c1, sort_c2 = st.columns([2, 1])
                 
-                # Dynamic list of columns available to sort by
                 sort_options = ["Pure Rank", "No. of Top", "Primary Rank", "Form Rank", "Comb. Rank", "Speed Rank", "Race Rank", "Comp. Rank", "PRB Rank", "Race Rating", "7:30AM Price", "Value Price", "Total", "Speed", "Ability", "Going", "Distance", "Course/Sim", "TrainrF", "JockyF", "Draw"]
                 if show_msai: sort_options.append("MSAI Rank")
-                
-                # Only include options that exist in the dataframe
                 avail_sorts = [c for c in sort_options if c in race_info.columns]
                 
-                # --- UPDATED: Hooks the dropdowns into Streamlit's long-term memory ---
-                if "race_sort_by" not in st.session_state: st.session_state.race_sort_by = "Pure Rank"
-                if "race_sort_dir" not in st.session_state: st.session_state.race_sort_dir = "Ascending 🔼"
-                
                 with sort_c1:
-                    try: default_idx = avail_sorts.index(st.session_state.race_sort_by)
+                    try: default_idx = avail_sorts.index(st.session_state.saved_sort_by)
                     except ValueError: default_idx = 0
-                    sort_by = st.selectbox("Sort Table By:", avail_sorts, index=default_idx, key="race_sort_by")
+                    sort_by = st.selectbox("Sort Table By:", avail_sorts, index=default_idx, key="temp_sort_by", on_change=save_sort_prefs)
                 with sort_c2:
-                    sort_dir = st.radio("Order:", ["Ascending 🔼", "Descending 🔽"], horizontal=True, key="race_sort_dir")
+                    dir_options = ["Ascending 🔼", "Descending 🔽"]
+                    try: dir_idx = dir_options.index(st.session_state.saved_sort_dir)
+                    except ValueError: dir_idx = 0
+                    sort_dir = st.radio("Order:", dir_options, index=dir_idx, horizontal=True, key="temp_sort_dir", on_change=save_sort_prefs)
                 
                 is_asc = True if "Ascending" in sort_dir else False
                 
