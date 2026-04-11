@@ -313,7 +313,23 @@ with h_col2:
 # -------------------------------------------------------------------------
 if st.session_state.get("is_admin") and st.session_state.get("show_admin_insights"):
     # --- ADMIN INSIGHTS VIEW ---
-    st.header("🔍 Admin Data Insights (Multi-Factor Analysis)")
+    st.header("🔍 Admin Data Insights")
+    
+    # --- NEW: LOGIN LOG VIEWER ---
+    with st.expander("📋 View App Access Logs", expanded=False):
+        if os.path.exists("login_history.csv"):
+            log_df = pd.read_csv("login_history.csv", names=["Date & Time", "User Type"])
+            # Display the table, sorting so the newest logins are at the top
+            st.dataframe(log_df.sort_values(by="Date & Time", ascending=False), use_container_width=True, hide_index=True)
+            
+            if st.button("🗑️ Clear Logs"):
+                os.remove("login_history.csv")
+                st.rerun()
+        else:
+            st.info("No login history recorded yet.")
+    st.markdown("---")
+            
+    st.markdown("### Multi-Factor Analysis")
     st.markdown("Combine multiple data elements to discover highly profitable 'Golden Rules' hidden in your historical data.")
     
     if df_all is not None and not df_all.empty:
