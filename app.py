@@ -39,9 +39,6 @@ if not check_password(): st.stop()
 if "show_admin_insights" not in st.session_state:
     st.session_state.show_admin_insights = False
 
-# --- 2. PAGE CONFIG ---
-st.set_page_config(page_title="BOTMan Betting Systems", page_icon="BOTManLogo.png", layout="wide", initial_sidebar_state="expanded")
-
 # --- 3. DATA ENGINE ---
 @st.cache_resource(show_spinner=False)
 def load_all_data():
