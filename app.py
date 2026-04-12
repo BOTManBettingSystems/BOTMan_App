@@ -832,14 +832,19 @@ else:
                             return s[-6:] if len(s) > 6 else s
                             
                         df_smart_master['Date_Key'] = df_smart_master['Date'].apply(clean_d)
-                        df_smart_master['Time'] = df_smart_master['Time'].astype(str).str.strip()
-                        df_smart_master['Course'] = df_smart_master['Course'].astype(str).str.strip()
-                        df_smart_master['Horse'] = df_smart_master['Horse'].astype(str).str.strip()
                         
+                        # --- BULLETPROOF MERGE PREP ---
+                        # 1. Strip the silent ".0" floats that Pandas adds to the ODS file
+                        df_smart_master['Time'] = df_smart_master['Time'].astype(str).str.split('.').str[0].str.strip()
                         df_a = df_all.copy()
-                        df_a['Time'] = df_a['Time'].astype(str).str.strip()
-                        df_a['Course'] = df_a['Course'].astype(str).str.strip()
-                        df_a['Horse'] = df_a['Horse'].astype(str).str.strip()
+                        df_a['Time'] = df_a['Time'].astype(str).str.split('.').str[0].str.strip()
+                        
+                        # 2. Force strict Title Case to ignore upstream capitalization glitches
+                        df_smart_master['Course'] = df_smart_master['Course'].astype(str).str.strip().str.title()
+                        df_a['Course'] = df_a['Course'].astype(str).str.strip().str.title()
+                        
+                        df_smart_master['Horse'] = df_smart_master['Horse'].astype(str).str.strip().str.title()
+                        df_a['Horse'] = df_a['Horse'].astype(str).str.strip().str.title()
                         
                         merged_smart = pd.merge(df_smart_master, df_a, on=['Date_Key', 'Time', 'Course', 'Horse'], how='inner')
                         merged_smart['Fin Pos'] = pd.to_numeric(merged_smart['Fin Pos'], errors='coerce')
