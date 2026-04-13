@@ -34,14 +34,6 @@ def check_password():
                 
             if "password_input" in st.session_state:
                 del st.session_state["password_input"]
-            
-            # --- NEW: Append successful login to history file ---
-            user_type = "Admin" if st.session_state["is_admin"] else "Guest"
-            with open("login_history.csv", "a") as f:
-                f.write(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')},{user_type}\n")
-                
-            if "password_input" in st.session_state:
-                del st.session_state["password_input"]
         else:
             st.session_state["password_correct"] = False
             
@@ -927,6 +919,8 @@ else:
         # --- NEW: THE DYNAMIC RESET HACK ---
         if "form_reset_counter" not in st.session_state:
             st.session_state.form_reset_counter = 0
+        if "sys_defaults" not in st.session_state:
+            st.session_state.sys_defaults = {}
 
         c_title, c_reset = st.columns([4, 1])
         with c_title:
@@ -937,6 +931,8 @@ else:
                 # Clear the results table from the screen
                 if 'tab4_results' in st.session_state:
                     del st.session_state['tab4_results']
+                # Clear any loaded system defaults
+                st.session_state.sys_defaults = {}
                 # Change the form ID to force a complete visual wipe
                 st.session_state.form_reset_counter += 1
                 st.rerun()
@@ -958,71 +954,96 @@ else:
                         max_d = datetime.now().date()
                     date_range = st.date_input("Test Specific Period (From - To)", [min_d, max_d], min_value=min_d, max_value=max_d)
                 
+                # --- PULL DEFAULTS FROM SAVED SYSTEM (IF LOADED) ---
+                defs = st.session_state.sys_defaults
+
                 with m_col:
                     all_months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-                    selected_months = st.multiselect("Include Specific Months (Seasonal Filter)", all_months, default=all_months)
+                    selected_months = st.multiselect("Include Specific Months (Seasonal Filter)", all_months, default=defs.get('months', all_months))
                 
                 st.markdown("---")
                 course_opts = sorted([str(x).strip() for x in b_df['Course'].dropna().unique() if str(x).strip()])
-                selected_courses = st.multiselect("🎯 Specific Course(s) [Leave blank to include ALL courses]", course_opts, default=[])
+                safe_courses = [c for c in defs.get('courses', []) if c in course_opts]
+                selected_courses = st.multiselect("🎯 Specific Course(s) [Leave blank to include ALL courses]", course_opts, default=safe_courses)
                 st.markdown("<br>", unsafe_allow_html=True)
 
                 c1, c2, c3, c4 = st.columns(4)
                 with c1:
                     race_types = b_df['Race Type'].dropna().unique().tolist()
-                    selected_race_types = st.multiselect("Race Type", race_types, default=race_types)
+                    safe_r_types = [r for r in defs.get('race_types', race_types) if r in race_types]
+                    selected_race_types = st.multiselect("Race Type", race_types, default=safe_r_types if safe_r_types else race_types)
+                    
                     hcap_types = b_df['H/Cap'].dropna().unique().tolist()
-                    selected_hcap = st.multiselect("Handicap Status", hcap_types, default=hcap_types)
+                    safe_h_types = [h for h in defs.get('hcap_types', hcap_types) if h in hcap_types]
+                    selected_hcap = st.multiselect("Handicap Status", hcap_types, default=safe_h_types if safe_h_types else hcap_types)
                 with c2:
                     p_col1, p_col2 = st.columns(2)
-                    with p_col1: price_min = st.number_input("Min Price", 0.0, 1000.0, 0.0, 0.5)
-                    with p_col2: price_max = st.number_input("Max Price", 0.0, 1000.0, 1000.0, 0.5)
-                    min_prob_gap = st.number_input("Minimum Prob Gap (%)", -100.0, 50.0, -100.0, 0.5) / 100
+                    with p_col1: price_min = st.number_input("Min Price", 0.0, 1000.0, float(defs.get('price_min', 0.0)), 0.5)
+                    with p_col2: price_max = st.number_input("Max Price", 0.0, 1000.0, float(defs.get('price_max', 1000.0)), 0.5)
+                    min_prob_gap = st.number_input("Minimum Prob Gap (%)", -100.0, 50.0, float(defs.get('min_prob_gap', -1.0) * 100), 0.5) / 100
                 with c3:
                     rnr_opts = ["2-7", "8-12", "13-16", ">16"]
-                    selected_rnrs = st.multiselect("No. of Runners", rnr_opts, default=rnr_opts)
+                    selected_rnrs = st.multiselect("No. of Runners", rnr_opts, default=defs.get('rnrs', rnr_opts))
                     if 'Class' in b_df.columns and not b_df['Class'].dropna().empty:
                         classes = sorted([int(x) for x in b_df['Class'].dropna().unique() if str(x).isdigit() or isinstance(x, (int, float))])
-                        selected_classes = st.multiselect("Class (1-6)", classes, default=classes)
+                        safe_classes = [c for c in defs.get('classes', classes) if c in classes]
+                        selected_classes = st.multiselect("Class (1-6)", classes, default=safe_classes if safe_classes else classes)
                     else:
                         st.multiselect("Class (1-6)", ["Not Found in CSV"], disabled=True)
                         selected_classes = []
                 with c4:
                     if 'Class Move' in b_df.columns and not b_df['Class Move'].dropna().empty:
                         cm_opts = [x for x in b_df['Class Move'].dropna().unique() if x in ['U', 'D', 'S']]
-                        selected_cm = st.multiselect("Class Movement", cm_opts, default=cm_opts)
+                        safe_cm = [c for c in defs.get('cm', cm_opts) if c in cm_opts]
+                        selected_cm = st.multiselect("Class Movement", cm_opts, default=safe_cm if safe_cm else cm_opts)
                     else:
                         st.multiselect("Class Movement", ["Not Found in CSV"], disabled=True)
                         selected_cm = []
 
                 c5, c6, c7, c8 = st.columns(4)
                 with c5:
-                    rank_1_only = st.checkbox("Must be AI Rank 1", value=False)
+                    rank_1_only = st.checkbox("Must be AI Rank 1", value=defs.get('rank_1_only', False))
                     sex_opts = ["c", "f", "g", "m", "h", "r", "x"]
-                    selected_sex = st.multiselect("Horse Sex", sex_opts, default=sex_opts)
-                with c6: value_filter = st.selectbox("Value Filter", ["Off", "AI Value vs 7:30AM", "AI Value vs BSP", "My Value vs 7:30AM", "My Value vs BSP"])
-                with c7: irish_f = st.selectbox("Irish Race", ["Any", "Y (Yes)", "No (Blank)"])
-                with c8: age_min, age_max = st.slider("Horse Age Range", 1, 20, (1, 20), 1)
+                    safe_sex = [s for s in defs.get('sex', sex_opts) if s in sex_opts]
+                    selected_sex = st.multiselect("Horse Sex", sex_opts, default=safe_sex if safe_sex else sex_opts)
+                with c6: 
+                    vf_opts = ["Off", "AI Value vs 7:30AM", "AI Value vs BSP", "My Value vs 7:30AM", "My Value vs BSP"]
+                    saved_vf = defs.get('value_filter', "Off")
+                    if saved_vf == "Value vs 7:30AM Price": saved_vf = "AI Value vs 7:30AM"
+                    if saved_vf == "Value vs BSP": saved_vf = "AI Value vs BSP"
+                    try: vf_idx = vf_opts.index(saved_vf)
+                    except ValueError: vf_idx = 0
+                    value_filter = st.selectbox("Value Filter", vf_opts, index=vf_idx)
+                with c7: 
+                    ir_opts = ["Any", "Y (Yes)", "No (Blank)"]
+                    try: ir_idx = ir_opts.index(defs.get('irish', "Any"))
+                    except ValueError: ir_idx = 0
+                    irish_f = st.selectbox("Irish Race", ir_opts, index=ir_idx)
+                with c8: 
+                    age_min, age_max = st.slider("Horse Age Range", 1, 20, (int(defs.get('age_min', 1)), int(defs.get('age_max', 20))), 1)
                 
                 with st.expander("📊 Advanced Rank Filters", expanded=False):
                     rank_opts = ["Any", "Rank 1", "Top 2", "Top 3"]
-                    
+                    def get_r_idx(col_name):
+                        val = defs.get('ranks', {}).get(col_name, "Any")
+                        return rank_opts.index(val) if val in rank_opts else 0
+                        
                     r1_c1, r1_c2, r1_c3, r1_c4, r1_c5 = st.columns(5)
-                    with r1_c1: comb_f = st.selectbox("Comb. Rank", rank_opts)
-                    with r1_c2: comp_f = st.selectbox("Comp. Rank", rank_opts)
-                    with r1_c3: speed_f = st.selectbox("Speed Rank", rank_opts)
-                    with r1_c4: race_f = st.selectbox("Race Rank", rank_opts)
-                    with r1_c5: primary_f = st.selectbox("Primary Rank", rank_opts)
+                    with r1_c1: comb_f = st.selectbox("Comb. Rank", rank_opts, index=get_r_idx('Comb. Rank'))
+                    with r1_c2: comp_f = st.selectbox("Comp. Rank", rank_opts, index=get_r_idx('Comp. Rank'))
+                    with r1_c3: speed_f = st.selectbox("Speed Rank", rank_opts, index=get_r_idx('Speed Rank'))
+                    with r1_c4: race_f = st.selectbox("Race Rank", rank_opts, index=get_r_idx('Race Rank'))
+                    with r1_c5: primary_f = st.selectbox("Primary Rank", rank_opts, index=get_r_idx('Primary Rank'))
                     
                     r2_c1, r2_c2, r2_c3, r2_c4, r2_c5 = st.columns(5)
-                    with r2_c1: msai_f = st.selectbox("MSAI Rank", rank_opts)
-                    with r2_c2: prb_f = st.selectbox("PRB Rank", rank_opts)
-                    with r2_c3: tprb_f = st.selectbox("Trainer PRB Rank", rank_opts)
-                    with r2_c4: jprb_f = st.selectbox("Jockey PRB Rank", rank_opts)
-                    with r2_c5: form_f = st.selectbox("Form Rank", rank_opts)
+                    with r2_c1: msai_f = st.selectbox("MSAI Rank", rank_opts, index=get_r_idx('MSAI Rank'))
+                    with r2_c2: prb_f = st.selectbox("PRB Rank", rank_opts, index=get_r_idx('PRB Rank'))
+                    with r2_c3: tprb_f = st.selectbox("Trainer PRB Rank", rank_opts, index=get_r_idx('Trainer PRB Rank'))
+                    with r2_c4: jprb_f = st.selectbox("Jockey PRB Rank", rank_opts, index=get_r_idx('Jockey PRB Rank'))
+                    with r2_c5: form_f = st.selectbox("Form Rank", rank_opts, index=get_r_idx('Form Rank'))
                     
                     r3_c1, r3_c2, r3_c3, r3_c4, r3_c5 = st.columns(5)
-                    with r3_c1: pure_f = st.selectbox("Pure Rank", rank_opts)
+                    with r3_c1: pure_f = st.selectbox("Pure Rank", rank_opts, index=get_r_idx('Pure Rank'))
                 
                 submit_button = st.form_submit_button(label="🚀 Process Data")
 
@@ -1050,7 +1071,13 @@ else:
                                 with open("BOTMan_user_systems.json", "r") as f: saved_dict = json.load(f)
                                 if saved_dict:
                                     for s_key, s_data in list(saved_dict.items()):
-                                        with st.expander(f"🔍 {s_key}"): st.json(s_data)
+                                        with st.expander(f"🔍 {s_key}"): 
+                                            st.json(s_data)
+                                            if st.button(f"📥 Load '{s_key}' into Builder", key=f"load_pub_{s_key}", use_container_width=True):
+                                                st.session_state.sys_defaults = s_data
+                                                st.session_state.form_reset_counter += 1
+                                                if 'tab4_results' in st.session_state: del st.session_state['tab4_results']
+                                                st.rerun()
                                 else: st.write("No systems currently active.")
                             except Exception as e: st.error(f"Error reading public file: {e}")
                 
@@ -1061,7 +1088,13 @@ else:
                                 with open("BOTMan_admin_systems.json", "r") as f: admin_dict = json.load(f)
                                 if admin_dict:
                                     for s_key, s_data in list(admin_dict.items()):
-                                        with st.expander(f"🔍 {s_key}"): st.json(s_data)
+                                        with st.expander(f"🔍 {s_key}"): 
+                                            st.json(s_data)
+                                            if st.button(f"📥 Load '{s_key}' into Builder", key=f"load_sec_{s_key}", use_container_width=True):
+                                                st.session_state.sys_defaults = s_data
+                                                st.session_state.form_reset_counter += 1
+                                                if 'tab4_results' in st.session_state: del st.session_state['tab4_results']
+                                                st.rerun()
                                 else: st.write("No admin systems currently active.")
                             except Exception as e: st.error(f"Error reading admin file: {e}")
                 st.markdown("---")
