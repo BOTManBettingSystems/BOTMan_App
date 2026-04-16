@@ -9,7 +9,8 @@ import gc
 import json
 import pickle
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
+import extra_streamlit_components as stx
 
 # --- 1. PAGE CONFIG ---
 st.set_page_config(page_title="BOTMan Betting Systems", page_icon="BOTManLogo.png", layout="wide", initial_sidebar_state="expanded")
@@ -18,17 +19,33 @@ if "session_id" not in st.session_state:
 
 # --- 2. ACCESS CONTROL ---
 def check_password():
+    # Initialize the Cookie Manager
+    cookie_manager = stx.CookieManager()
+    
+    # 1. Check if the user already has a valid 30-day cookie
+    auth_cookie = cookie_manager.get(cookie="botman_auth")
+    
+    if auth_cookie in ["Admin", "Guest"]:
+        st.session_state["password_correct"] = True
+        st.session_state["is_admin"] = (auth_cookie == "Admin")
+        return True
+        
+    # 2. If no cookie, show the standard login form
     def password_entered():
         admin_p = st.secrets["ADMIN_PASSWORD"]
         guest_p = st.secrets["GUEST_PASSWORD"]
-        
         entered = st.session_state.get("password_input", "")
+        
         if entered in [admin_p, guest_p]:
             st.session_state["password_correct"] = True
             st.session_state["is_admin"] = (entered == admin_p)
-            
-            # --- UPDATED: Now logs the unique Session ID ---
             user_type = "Admin" if st.session_state["is_admin"] else "Guest"
+            
+            # --- THE MAGIC: Set a persistent cookie for 30 days ---
+            expire_date = datetime.now() + timedelta(days=30)
+            cookie_manager.set("botman_auth", user_type, expires_at=expire_date)
+            
+            # Log the new fresh session
             with open("login_history.csv", "a") as f:
                 f.write(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')},{user_type},Session:{st.session_state.session_id}\n")
                 
@@ -36,18 +53,15 @@ def check_password():
                 del st.session_state["password_input"]
         else:
             st.session_state["password_correct"] = False
-            
-    if "password_correct" not in st.session_state:
+
+    if not st.session_state.get("password_correct", False):
         st.markdown("<h2 style='text-align: center; color: #002147;'>BOTMan Betting Systems</h2>", unsafe_allow_html=True)
         st.text_input("Enter Password", type="password", on_change=password_entered, key="password_input")
         return False
-    return st.session_state.get("password_correct", False)
+        
+    return True
 
-if not check_password(): st.stop() 
-
-if "show_admin_insights" not in st.session_state:
-    st.session_state.show_admin_insights = False
-
+if not check_password(): st.stop()
 # --- 3. DATA ENGINE ---
 @st.cache_resource(show_spinner=False)
 def load_all_data():
