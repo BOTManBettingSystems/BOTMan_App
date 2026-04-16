@@ -1175,6 +1175,10 @@ else:
                 df_filtered = b_df[mask].copy()
 
                 if not df_filtered.empty:
+                    # --- NEW: Generate the raw historical data CSV ---
+                    hist_csv_data_out = df_filtered.to_csv(index=False).encode('utf-8')
+                    sys_timestamp = datetime.now().strftime('%d%m%y_%H%M%S')
+
                     breakdown = df_filtered.groupby(['Race Type', 'H/Cap', 'Price Bracket'], observed=False).agg(
                         Bets=('Horse', 'count'), Wins=('Is_Win', 'sum'), Win_Profit=('Win P/L <2%', 'sum'), Places=('Is_Place', 'sum'), Place_Profit=('Place P/L <2%', 'sum')
                     ).reset_index()
@@ -1263,7 +1267,11 @@ else:
                         html_table_out += f"<tr><td class='left-align'>{row['Race Type']}</td><td class='left-align'>{row['H/Cap']}</td><td class='left-align'>{row['Price Bracket']}</td><td>{row['Bets']}</td><td>{row['Wins']}</td><td><b>£{row['Win_Profit']:.2f}</b></td><td>{row['Strike Rate (%)']:.2f}%</td><td>{row['Places']}</td><td><b>£{row['Place_Profit']:.2f}</b></td><td>{row['Place SR (%)']:.2f}%</td><td style='color:{t_col};'><b>£{row['Total P/L']:.2f}</b></td></tr>"
                     html_table_out += "</tbody></table></div>"
 
-                    st.session_state['tab4_results'] = {'kpis': kpis, 'breakdown_html': html_table_out, 'qual_html': qual_html_out, 'csv': csv_data_out, 'timestamp': timestamp_out, 'val_warn': val_bsp_warning}
+                    st.session_state['tab4_results'] = {
+                        'kpis': kpis, 'breakdown_html': html_table_out, 'qual_html': qual_html_out, 
+                        'csv': csv_data_out, 'timestamp': timestamp_out if timestamp_out else sys_timestamp, 
+                        'val_warn': val_bsp_warning, 'hist_csv': hist_csv_data_out
+                    }
                 else: st.session_state['tab4_results'] = "empty"
 
             if 'tab4_results' in st.session_state:
@@ -1293,6 +1301,16 @@ else:
                             st.info("There are no horses running today that match these exact system criteria.")
 
                     st.markdown("### Detailed Preview Breakdown")
+                    c_dl, c_blank = st.columns([1, 3])
+                    with c_dl:
+                        if 'hist_csv' in res and res['hist_csv']:
+                            st.download_button(
+                                label="📥 Download ALL Historic Data (CSV)",
+                                data=res['hist_csv'],
+                                file_name=f"BOTMan_Historic_System_{res['timestamp']}.csv",
+                                mime="text/csv",
+                                use_container_width=True
+                            )
                     st.markdown(res['breakdown_html'], unsafe_allow_html=True)
     
 # --- Page 5: RACE ANALYSIS ---
