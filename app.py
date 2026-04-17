@@ -1036,6 +1036,12 @@ else:
                 with c8: 
                     age_min, age_max = st.slider("Horse Age Range", 1, 20, (int(defs.get('age_min', 1)), int(defs.get('age_max', 20))), 1)
                 
+                st.markdown("### 📊 Display Options")
+                group_opts = ['Race Type', 'H/Cap', 'Price Bracket', 'Month_Yr', 'Course', 'Class', 'No. of Rnrs', 'Sex', 'Comb. Rank', 'Speed Rank', 'Race Rank', 'Primary Rank', 'Pure Rank', 'MSAI Rank']
+                saved_groupings = defs.get('groupby', ['Race Type', 'H/Cap', 'Price Bracket'])
+                safe_groupings = [g for g in saved_groupings if g in group_opts]
+                selected_groupby = st.multiselect("Group Breakdown Table By (Select up to 3):", group_opts, default=safe_groupings, max_selections=3)
+
                 with st.expander("📊 Advanced Rank Filters", expanded=False):
                     rank_opts = ["Any", "Rank 1", "Top 2", "Top 3"]
                     def get_r_idx(col_name):
@@ -1072,7 +1078,8 @@ else:
                         if new_sys_name:
                             sys_data = {
                                 "race_types": selected_race_types, "hcap_types": selected_hcap, "price_min": price_min, "price_max": price_max, "min_prob_gap": min_prob_gap, "rnrs": selected_rnrs, "classes": selected_classes, "cm": selected_cm, "sex": selected_sex, "courses": selected_courses, "rank_1_only": rank_1_only, "value_filter": value_filter, "irish": irish_f, "age_min": age_min, "age_max": age_max, "months": selected_months,
-                                "ranks": {"Comb. Rank": comb_f, "Comp. Rank": comp_f, "Speed Rank": speed_f, "Race Rank": race_f, "Primary Rank": primary_f, "MSAI Rank": msai_f, "PRB Rank": prb_f, "Trainer PRB Rank": tprb_f, "Jockey PRB Rank": jprb_f, "Form Rank": form_f, "Pure Rank": pure_f}
+                                "ranks": {"Comb. Rank": comb_f, "Comp. Rank": comp_f, "Speed Rank": speed_f, "Race Rank": race_f, "Primary Rank": primary_f, "MSAI Rank": msai_f, "PRB Rank": prb_f, "Trainer PRB Rank": tprb_f, "Jockey PRB Rank": jprb_f, "Form Rank": form_f, "Pure Rank": pure_f},
+                                "groupby": selected_groupby
                             }
                             st.code(f'"{new_sys_name}": {json.dumps(sys_data, indent=4)}', language="json")
                         else: st.error("Please enter a name for the system to generate code.")
@@ -1179,7 +1186,15 @@ else:
                     hist_csv_data_out = df_filtered.to_csv(index=False).encode('utf-8')
                     sys_timestamp = datetime.now().strftime('%d%m%y_%H%M%S')
 
-                    breakdown = df_filtered.groupby(['Race Type', 'H/Cap', 'Price Bracket'], observed=False).agg(
+                    # 1. Ensure Month_Yr exists dynamically
+                    if 'Month_Yr' not in df_filtered.columns and 'Date_DT' in df_filtered.columns:
+                        df_filtered['Month_Yr'] = df_filtered['Date_DT'].dt.strftime('%Y-%m') # e.g. 2026-04 (sorts perfectly)
+
+                    # 2. Fallback if user clears the box completely
+                    if not selected_groupby: selected_groupby = ['Race Type', 'H/Cap', 'Price Bracket']
+
+                    # 3. Dynamic Grouping
+                    breakdown = df_filtered.groupby(selected_groupby, observed=False).agg(
                         Bets=('Horse', 'count'), Wins=('Is_Win', 'sum'), Win_Profit=('Win P/L <2%', 'sum'), Places=('Is_Place', 'sum'), Place_Profit=('Place P/L <2%', 'sum')
                     ).reset_index()
                     
@@ -1188,7 +1203,7 @@ else:
                     breakdown['Place SR (%)'] = (breakdown['Places'] / breakdown['Bets'] * 100).fillna(0)
                     breakdown['Win ROI (%)'] = (breakdown['Win_Profit'] / breakdown['Bets'] * 100).fillna(0)
                     breakdown['Total P/L'] = breakdown['Win_Profit'] + breakdown['Place_Profit']
-                    breakdown = breakdown.sort_values(by=['Race Type', 'H/Cap', 'Price Bracket'])
+                    breakdown = breakdown.sort_values(by=selected_groupby)
 
                     total_sys_bets = breakdown['Bets'].sum()
                     total_sys_profit = breakdown['Total P/L'].sum()
@@ -1260,11 +1275,28 @@ else:
                             for _, q_row in t_filtered.iterrows(): qual_html_out += f"<tr><td class='center-text'>{q_row['Date']}</td><td class='center-text'>{q_row['Time']}</td><td class='left-align'>{q_row['Course']}</td><td class='left-align'><b>{q_row['Horse']}</b></td><td class='center-text'>{q_row['7:30AM Price']:.2f}</td><td class='center-text'><b>{int(q_row.get('Pure Rank', 0))}</b></td></tr>"
                             qual_html_out += "</tbody></table></div>"
 
+                    # 4. Dynamic HTML Table Generation
                     html_table_out = '<style>.builder-table { border-collapse: collapse; width: 100%; min-width: 900px; font-size: 14px; font-family: sans-serif; } .builder-table th, .builder-table td { border: 1px solid #ccc; padding: 4px; text-align: center; white-space: nowrap; } .builder-table tr:hover { background-color: #0000FF !important; color: white !important; } .left-align { text-align: left !important; padding-left: 8px !important; }</style>'
-                    html_table_out += '<div class="scrollable-table"><table class="builder-table"><thead><tr style="background-color: #f0f2f6; color: black;"><th class="left-align">Race Type</th><th class="left-align">H/Cap</th><th class="left-align">Price Bracket</th><th>Bets</th><th>Wins</th><th>Win P/L</th><th>Win SR</th><th>Places</th><th>Plc P/L</th><th>Plc SR</th><th>Total P/L</th></tr></thead><tbody>'
+                    html_table_out += '<div class="scrollable-table"><table class="builder-table"><thead><tr style="background-color: #f0f2f6; color: black;">'
+                    
+                    # Generate headers dynamically based on selection
+                    for col in selected_groupby:
+                        html_table_out += f'<th class="left-align">{col}</th>'
+                        
+                    html_table_out += '<th>Bets</th><th>Wins</th><th>Win P/L</th><th>Win SR</th><th>Places</th><th>Plc P/L</th><th>Plc SR</th><th>Total P/L</th></tr></thead><tbody>'
+                    
                     for _, row in breakdown.iterrows(): 
                         t_col = "#2e7d32" if row['Total P/L'] >= 0 else "#d32f2f"
-                        html_table_out += f"<tr><td class='left-align'>{row['Race Type']}</td><td class='left-align'>{row['H/Cap']}</td><td class='left-align'>{row['Price Bracket']}</td><td>{row['Bets']}</td><td>{row['Wins']}</td><td><b>£{row['Win_Profit']:.2f}</b></td><td>{row['Strike Rate (%)']:.2f}%</td><td>{row['Places']}</td><td><b>£{row['Place_Profit']:.2f}</b></td><td>{row['Place SR (%)']:.2f}%</td><td style='color:{t_col};'><b>£{row['Total P/L']:.2f}</b></td></tr>"
+                        html_table_out += "<tr>"
+                        
+                        # Generate row cells dynamically based on selection
+                        for col in selected_groupby:
+                            val = row[col]
+                            if isinstance(val, float) and val.is_integer(): val = int(val)
+                            html_table_out += f"<td class='left-align'>{val}</td>"
+                            
+                        html_table_out += f"<td>{row['Bets']}</td><td>{row['Wins']}</td><td><b>£{row['Win_Profit']:.2f}</b></td><td>{row['Strike Rate (%)']:.2f}%</td><td>{row['Places']}</td><td><b>£{row['Place_Profit']:.2f}</b></td><td>{row['Place SR (%)']:.2f}%</td><td style='color:{t_col};'><b>£{row['Total P/L']:.2f}</b></td></tr>"
+                    
                     html_table_out += "</tbody></table></div>"
 
                     st.session_state['tab4_results'] = {
