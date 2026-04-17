@@ -1037,10 +1037,27 @@ else:
                     age_min, age_max = st.slider("Horse Age Range", 1, 20, (int(defs.get('age_min', 1)), int(defs.get('age_max', 20))), 1)
                 
                 st.markdown("### 📊 Display Options")
-                group_opts = ['Race Type', 'H/Cap', 'Price Bracket', 'Month_Yr', 'Course', 'Class', 'No. of Rnrs', 'Sex', 'Comb. Rank', 'Speed Rank', 'Race Rank', 'Primary Rank', 'Pure Rank', 'MSAI Rank']
+                
+                # Comprehensive list of all possible grouping columns
+                master_group_opts = [
+                    'Race Type', 'H/Cap', 'Price Bracket', 'Month_Yr', 'Course', 
+                    'Class', 'Class Move', 'No. of Rnrs', 'Age', 'Sex', 'Irish?', 'Irish',
+                    'Comb. Rank', 'Comp. Rank', 'Speed Rank', 'Race Rank', 
+                    'Primary Rank', 'Form Rank', 'Pure Rank', 'MSAI Rank', 
+                    'PRB Rank', 'Trainer PRB Rank', 'Jockey PRB Rank'
+                ]
+                
+                # Only show options that actually exist in the loaded CSV (plus Month_Yr which we generate)
+                valid_group_opts = [c for c in master_group_opts if c in b_df.columns or c == 'Month_Yr']
+                
                 saved_groupings = defs.get('groupby', ['Race Type', 'H/Cap', 'Price Bracket'])
-                safe_groupings = [g for g in saved_groupings if g in group_opts]
-                selected_groupby = st.multiselect("Group Breakdown Table By (Select up to 3):", group_opts, default=safe_groupings, max_selections=3)
+                safe_groupings = [g for g in saved_groupings if g in valid_group_opts]
+                
+                # Fallback in case a saved grouping is completely invalid
+                if not safe_groupings and 'Race Type' in valid_group_opts:
+                    safe_groupings = ['Race Type']
+                    
+                selected_groupby = st.multiselect("Group Breakdown Table By (Select up to 3):", valid_group_opts, default=safe_groupings, max_selections=3)
 
                 with st.expander("📊 Advanced Rank Filters", expanded=False):
                     rank_opts = ["Any", "Rank 1", "Top 2", "Top 3"]
