@@ -1060,7 +1060,8 @@ else:
                 selected_groupby = st.multiselect("Group Breakdown Table By (Select up to 3):", valid_group_opts, default=safe_groupings, max_selections=3)
 
                 with st.expander("📊 Advanced Rank Filters", expanded=False):
-                    rank_opts = ["Any", "Rank 1", "Top 2", "Top 3"]
+                    # --- UPDATED: Added Top 4 and Top 5 ---
+                    rank_opts = ["Any", "Rank 1", "Top 2", "Top 3", "Top 4", "Top 5"]
                     def get_r_idx(col_name):
                         val = defs.get('ranks', {}).get(col_name, "Any")
                         return rank_opts.index(val) if val in rank_opts else 0
@@ -1176,12 +1177,15 @@ else:
                     if irish_f == "Y (Yes)": mask = mask & (t_irish_series == 'Y')
                     elif irish_f == "No (Blank)": mask = mask & (t_irish_series != 'Y')
 
+                # --- UPDATED: Added Top 4 and Top 5 logic here ---
                 def apply_rank_filter(df_mask, current_df, col_name, setting):
                     if setting != "Any" and col_name in current_df.columns:
                         num_col = pd.to_numeric(current_df[col_name], errors='coerce')
                         if setting == "Rank 1": return df_mask & (num_col == 1)
                         elif setting == "Top 2": return df_mask & (num_col <= 2)
                         elif setting == "Top 3": return df_mask & (num_col <= 3)
+                        elif setting == "Top 4": return df_mask & (num_col <= 4)
+                        elif setting == "Top 5": return df_mask & (num_col <= 5)
                     return df_mask
 
                 mask = apply_rank_filter(mask, b_df, 'Comb. Rank', comb_f)
