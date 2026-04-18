@@ -618,7 +618,7 @@
         "Pure Rank": "Rank 1"
     }
 },
-"GC Turf Handicap": {
+"GC Turf Handicap (early season)": {
     "race_types": [
         "Turf"
     ],
@@ -659,18 +659,8 @@
     "age_min": 1,
     "age_max": 20,
     "months": [
-        "Jan",
-        "Feb",
         "Mar",
-        "Apr",
-        "May",
-        "Jun",
-        "Jul",
-        "Aug",
-        "Sep",
-        "Oct",
-        "Nov",
-        "Dec"
+        "Apr"
     ],
     "ranks": {
         "Comb. Rank": "Rank 1",
@@ -1720,5 +1710,73 @@
         "Form Rank": "Any",
         "Pure Rank": "Any"
     }
+},
+"GC Turf Value Handicap (main season)": {
+    "race_types": [
+        "Turf"
+    ],
+    "hcap_types": [
+        "Y"
+    ],
+    "price_min": 2.01,
+    "price_max": 1000.0,
+    "min_prob_gap": -1.0,
+    "rnrs": [
+        "2-7",
+        "8-12",
+        "13-16",
+        ">16"
+    ],
+    "classes": [
+        3,
+        4,
+        5
+    ],
+    "cm": [
+        "S",
+        "U",
+        "D"
+    ],
+    "sex": [
+        "c",
+        "f",
+        "g",
+        "m",
+        "h",
+        "r",
+        "x"
+    ],
+    "courses": [],
+    "rank_1_only": false,
+    "value_filter": "AI Value vs 7:30AM",
+    "irish": "No (Blank)",
+    "age_min": 3,
+    "age_max": 20,
+    "months": [
+        "May",
+        "Jun",
+        "Jul",
+        "Aug",
+        "Sep",
+        "Oct"
+    ],
+    "ranks": {
+        "Comb. Rank": "Rank 1",
+        "Comp. Rank": "Any",
+        "Speed Rank": "Top 2",
+        "Race Rank": "Top 2",
+        "Primary Rank": "Any",
+        "MSAI Rank": "Any",
+        "PRB Rank": "Any",
+        "Trainer PRB Rank": "Any",
+        "Jockey PRB Rank": "Any",
+        "Form Rank": "Top 3",
+        "Pure Rank": "Rank 1"
+    },
+    "groupby": [
+        "Race Type",
+        "H/Cap",
+        "Price Bracket"
+    ]
 }
 }
