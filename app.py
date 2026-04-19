@@ -666,7 +666,6 @@ else:
                 if track_stats:
                     top_tracks = pd.DataFrame(track_stats).sort_values('ROI%', ascending=False).head(5)
                     st.table(top_tracks.set_index('Course'))
-
 # --- Page 3: General Systems Dashboard ---
     elif app_mode == "🧠 General Systems":
         st.header("🧠 General Systems")
@@ -758,6 +757,8 @@ else:
                                         if setting == "Rank 1": s_mask &= (num_col == 1)
                                         elif setting == "Top 2": s_mask &= (num_col <= 2)
                                         elif setting == "Top 3": s_mask &= (num_col <= 3)
+                                        elif setting == "Top 4": s_mask &= (num_col <= 4)
+                                        elif setting == "Top 5": s_mask &= (num_col <= 5)
 
                                 sys_df = t_df[s_mask].copy()
                                 if not sys_df.empty:
@@ -898,7 +899,7 @@ else:
                             combined['SortKey'] = np.where(combined['Period'] == 'All Time', 1, 2)
                             combined = combined.sort_values(by=[sys_col_found, 'SortKey']).drop('SortKey', axis=1)
 
-                            html_table = """<style>.builder-table { border-collapse: collapse; width: 100%; min-width: 1000px; font-size: 14px; font-family: sans-serif; margin-top: 15px; } .builder-table th, .builder-table td { border: 1px solid #ccc; padding: 6px; text-align: center; white-space: nowrap; } .builder-table tr:hover { background-color: #0000FF !important; color: white !important; } .left-align { text-align: left !important; padding-left: 8px !important; }</style><div class="scrollable-table"><table class="builder-table"><thead><tr style="background-color: #1a3a5f; color: white;"><th class="left-align">System Name</th><th class="left-align">Period</th><th>Bets</th><th>Wins</th><th>Win P/L</th><th>Win SR</th><th>Places</th><th>Plc P/L</th><th>Plc SR</th><th>Total P/L</th></tr></thead><tbody>"""
+                            html_table = """<style>.builder-table { border-collapse: collapse; width: 100%; min-width: 1000px; font-size: 14px; font-family: sans-serif; margin-top: 15px; } .builder-table th, .builder-table td { border: 1px solid #ccc; padding: 6px; text-align: center; white-space: nowrap; } .builder-table tr:hover { background-color: #0000FF !important; color: white !important; } .left-align { text-align: left !important; padding-left: 8px !important; }</style><div class="scrollable-table"><table class="builder-table"><thead><tr style="background-color: #1a3a5f; color: white;"><th class="left-align">System Name</th><th class="left-align">Period</th><th>Bets</th><th>Wins</th><th>Win P/L</th><th>Win SR</th><th>Places</th><th>Plc P/L</th><th>Plc SR</th><th>Total P/L</th><th>DL</th></tr></thead><tbody>"""
                             
                             unique_sys = combined[sys_col_found].unique()
                             palette = ["#e8f4f8", "#f8e8e8", "#e8f8e8", "#f8f4e8", "#f4e8f8", "#e8f8f8"]
@@ -907,7 +908,7 @@ else:
                             last_sys = None
                             for _, row in combined.iterrows():
                                 if last_sys is not None and last_sys != row[sys_col_found]:
-                                    html_table += '<tr><td colspan="10" style="border: none !important; background-color: white !important; height: 15px; padding: 0 !important;"></td></tr>'
+                                    html_table += '<tr><td colspan="11" style="border: none !important; background-color: white !important; height: 15px; padding: 0 !important;"></td></tr>'
                                 last_sys = row[sys_col_found]
                                 bg = bg_colors[row[sys_col_found]]
                                 b_s = "<b>" if row['Period'] == 'All Time' else ""
@@ -916,7 +917,18 @@ else:
                                 p_color = "#2e7d32" if row['Place_Profit'] > 0 else "#d32f2f" if row['Place_Profit'] < 0 else "black"
                                 t_color = "#2e7d32" if row['Total P/L'] > 0 else "#d32f2f" if row['Total P/L'] < 0 else "black"
                                 
-                                html_table += f"""<tr style="background-color: {bg};"><td class="left-align"><b>{row[sys_col_found]}</b></td><td class="left-align">{b_s}{row['Period']}{b_e}</td><td>{row['Bets']}</td><td>{row['Wins']}</td><td style="color:{w_color}; font-weight:bold;">£{row['Win_Profit']:.2f}</td><td>{row['Strike Rate (%)']:.2f}%</td><td>{row['Places']}</td><td style="color:{p_color}; font-weight:bold;">£{row['Place_Profit']:.2f}</td><td>{row['Place SR (%)']:.2f}%</td><td style="color:{t_color}; font-weight:bold;">£{row['Total P/L']:.2f}</td></tr>"""
+                                # --- NEW: Generate row-specific CSV base64 link ---
+                                if row['Period'] == 'All Time':
+                                    sub_df = merged_smart[merged_smart[sys_col_found] == row[sys_col_found]]
+                                else:
+                                    sub_df = merged_smart[(merged_smart[sys_col_found] == row[sys_col_found]) & (merged_smart['Month_Yr'] == row['Period'])]
+                                    
+                                csv_b64 = base64.b64encode(sub_df.to_csv(index=False).encode('utf-8')).decode()
+                                safe_name = str(row[sys_col_found]).replace(' ', '_').replace('/', '-')
+                                safe_per = str(row['Period']).replace(' ', '')
+                                dl_link = f'<a href="data:file/csv;base64,{csv_b64}" download="{safe_name}_{safe_per}.csv" style="text-decoration:none; font-size:16px;" title="Download selections">📥</a>'
+                                
+                                html_table += f"""<tr style="background-color: {bg};"><td class="left-align"><b>{row[sys_col_found]}</b></td><td class="left-align">{b_s}{row['Period']}{b_e}</td><td>{row['Bets']}</td><td>{row['Wins']}</td><td style="color:{w_color}; font-weight:bold;">£{row['Win_Profit']:.2f}</td><td>{row['Strike Rate (%)']:.2f}%</td><td>{row['Places']}</td><td style="color:{p_color}; font-weight:bold;">£{row['Place_Profit']:.2f}</td><td>{row['Place SR (%)']:.2f}%</td><td style="color:{t_color}; font-weight:bold;">£{row['Total P/L']:.2f}</td><td>{dl_link}</td></tr>"""
                             html_table += "</tbody></table></div>"
                             st.markdown(html_table, unsafe_allow_html=True)
                         else: st.warning("Found the file, but none of the picks had a matched race result in the database.")
@@ -927,7 +939,6 @@ else:
                     st.info("To see Admin performance tracking, please upload 'BOTManAdminMaster.ods' to the root folder.")
                 else:
                     st.info("To see live performance tracking, please upload 'BOTManSystemsMaster.ods' to the root folder.")
-
 # --- Page 4: Mini SYSTEM BUILDER ---
     elif app_mode == "🛠️ System Builder":
         # --- NEW: THE DYNAMIC RESET HACK ---
