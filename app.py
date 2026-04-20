@@ -168,7 +168,6 @@ def load_ods_master():
     if os.path.exists("BOTManSystemsMaster.ods"):
         return pd.read_excel("BOTManSystemsMaster.ods", engine="odf")
     return None
-
 # --- 6. OPTIMIZATION ENGINE FOR TAB 4 & ADMIN ---
 @st.cache_data(show_spinner=False)
 def prep_system_builder_data(_df, _model, feats, _shadow_model=None, shadow_feats=None, is_live_today=False):
@@ -185,7 +184,50 @@ def prep_system_builder_data(_df, _model, feats, _shadow_model=None, shadow_feat
     if not is_live_today:
         b_df = b_df[b_df.get('Fin Pos', 0) > 0].copy()
     
-    b_df['ML_Prob'] = _model.predict_proba(b_df[feats].fillna(0))[:, 1]
+    # --- THE PREDICTION VAULT BRIDGE ---
+    if os.path.exists("BOTMan_Prediction_Vault.csv") and not is_live_today:
+        vault_df = pd.read_csv("BOTMan_Prediction_Vault.csv")
+        
+        # Force strict string matching to prevent subtle join failures
+        for c in ['Date', 'Time', 'Course', 'Horse']:
+            if c in vault_df.columns and c in b_df.columns:
+                vault_df[c] = vault_df[c].astype(str).str.strip()
+                b_df[c] = b_df[c].astype(str).str.strip()
+                
+        # Merge the frozen AI opinions onto the historical facts
+        b_df = pd.merge(b_df, vault_df[['Date', 'Time', 'Course', 'Horse', 'ML_Prob', 'Rank', 'Value Price']], 
+                        on=['Date', 'Time', 'Course', 'Horse'], how='left', suffixes=('', '_vault'))
+                        
+        # Identify which horses are brand new and missing from the Vault
+        missing_mask = b_df['ML_Prob_vault'].isna()
+        
+        if missing_mask.any():
+            # Predict ONLY the new horses dynamically
+            new_horses = b_df[missing_mask].copy()
+            new_probs = _model.predict_proba(new_horses[feats].fillna(0))[:, 1]
+            b_df.loc[missing_mask, 'ML_Prob'] = new_probs
+            
+            # Calculate temporary Rank and Value for the new ones
+            b_df['ML_Prob'] = b_df['ML_Prob_vault'].fillna(b_df['ML_Prob'])
+            b_df['Rank'] = b_df['Rank_vault'].fillna(b_df.groupby(['Date_Key', 'Time', 'Course'])['ML_Prob'].rank(ascending=False, method='min'))
+            b_df['Value Price'] = b_df['Value Price_vault'].fillna(1 / b_df['ML_Prob'])
+            
+            # Auto-Append the new horses to the Vault CSV quietly in the background
+            append_df = b_df[missing_mask][['Date', 'Time', 'Course', 'Horse', 'ML_Prob', 'Rank', 'Value Price']]
+            append_df.to_csv("BOTMan_Prediction_Vault.csv", mode='a', header=False, index=False)
+        else:
+            b_df['ML_Prob'] = b_df['ML_Prob_vault']
+            b_df['Rank'] = b_df['Rank_vault']
+            b_df['Value Price'] = b_df['Value Price_vault']
+            
+        b_df = b_df.drop(columns=[c for c in b_df.columns if '_vault' in c])
+        
+    else:
+        # Fallback (or if it's today's live predictions)
+        b_df['ML_Prob'] = _model.predict_proba(b_df[feats].fillna(0))[:, 1]
+        b_df['Rank'] = b_df.groupby(['Date_Key', 'Time', 'Course'])['ML_Prob'].rank(ascending=False, method='min')
+        b_df['Value Price'] = 1 / b_df['ML_Prob']
+    # --- END OF VAULT BRIDGE ---
     
     if _shadow_model is not None and shadow_feats is not None:
         missing_shadow = [f for f in shadow_feats if f not in b_df.columns]
