@@ -353,6 +353,40 @@ if st.session_state.get("is_admin") and st.session_state.get("show_admin_insight
         else:
             st.info("No login history recorded today. Logs clear automatically on Daily Refresh.")
     st.markdown("---")
+    
+    # --- PHASE 1: PREDICTION VAULT GENERATOR ---
+    st.markdown("### 💾 Prediction Vault Management")
+    st.info("Generates the permanent historical prediction file to prevent past results from changing when the AI retrains.")
+    
+    if st.button("Freeze Historical Predictions (Build Vault)", type="primary", use_container_width=True):
+        with st.spinner("Processing 2 years of history... This may take a minute."):
+            try:
+                # 1. Get the historical records with valid finishes
+                history_df = df_all[df_all['Fin Pos'] > 0].copy()
+                
+                # 2. Run them through the CURRENT AI brain
+                vault_df = prep_system_builder_data(history_df, model, feats, shadow_model, shadow_feats)
+                
+                # 3. Strip it down to just the IDs and the AI Opinions
+                vault_cols = ['Date', 'Time', 'Course', 'Horse', 'ML_Prob', 'Rank', 'Value Price']
+                available_cols = [c for c in vault_cols if c in vault_df.columns]
+                final_vault = vault_df[available_cols]
+                
+                # 4. Generate the CSV file
+                csv_vault = final_vault.to_csv(index=False).encode('utf-8')
+                
+                st.success(f"Vault generated successfully! ({len(final_vault)} records frozen)")
+                st.download_button(
+                    label="📥 Download BOTMan_Prediction_Vault.csv",
+                    data=csv_vault,
+                    file_name="BOTMan_Prediction_Vault.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                )
+            except Exception as e:
+                st.error(f"Error building vault: {e}")
+                
+    st.markdown("---")
             
     st.markdown("### Multi-Factor Analysis")
     st.markdown("Combine multiple data elements to discover highly profitable 'Golden Rules' hidden in your historical data.")
