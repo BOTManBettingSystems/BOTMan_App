@@ -484,37 +484,32 @@ if st.session_state.get("is_admin") and st.session_state.get("show_admin_insight
                 st.markdown("<br>", unsafe_allow_html=True)
                 if st.button("🚀 Auto-Discover Golden Rules", type="primary", use_container_width=True):
                     import itertools
-                    with st.spinner(f"Mining database for logical systems hitting {min_sr}% S/R and {min_roi}% ROI..."):
+                    with st.spinner(f"Mining database for HIGH-VOLUME robust systems hitting {min_sr}% S/R and {min_roi}% ROI..."):
                         discovered_systems = []
                         
-                        # --- 1. SMART FEATURE ENGINEERING ---
-                        # We create a temporary dataframe just for discovery that thinks logically
+                        # --- 1. RUTHLESS FEATURE PRUNING (Anti-Overfitting) ---
                         disc_df = ins_df.copy()
                         smart_cols = []
                         
-                        # A. Create the "Consensus" Feature (How many ratings agree?)
+                        # A. The Consensus Feature (The ultimate robust metric)
                         core_ranks = [c for c in ['Speed Rank', 'Form Rank', 'MSAI Rank', 'PRB Rank', 'Primary Rank', 'Pure Rank'] if c in disc_df.columns]
                         if core_ranks:
                             disc_df['Ratings in Top 3'] = (disc_df[core_ranks] <= 3).sum(axis=1).astype(str) + f" of {len(core_ranks)}"
                             smart_cols.append('Ratings in Top 3')
                             
-                        # B. Create Logical Rank Bins
-                        rank_cols = [c for c in analysis_cols if 'Rank' in c and c in disc_df.columns]
-                        for c in rank_cols:
-                            disc_df[c] = pd.to_numeric(disc_df[c], errors='coerce')
-                            # Bin them logically: 1st, 2nd-3rd, 4th-5th, and Garbage
-                            disc_df[f"{c} Tier"] = pd.cut(disc_df[c], bins=[0, 1, 3, 5, 999], labels=["Rank 1", "Ranks 2-3", "Ranks 4-5", "Rank 6+"])
-                            smart_cols.append(f"{c} Tier")
-                            
-                        # C. Add Categorical Data
-                        cat_cols = ['Class', 'Class Move', 'Price Bracket']
-                        if 'Age' in disc_df.columns: cat_cols.append('Age')
-                        if 'Sex' in disc_df.columns: cat_cols.append('Sex')
-                        
-                        for c in cat_cols:
+                        # B. Only allow the absolute strongest Ranks (No age, sex, or exact prices allowed)
+                        allowed_ranks = ['Speed Rank', 'Primary Rank', 'Pure Rank', 'MSAI Rank']
+                        for c in allowed_ranks:
                             if c in disc_df.columns:
-                                smart_cols.append(c)
+                                disc_df[c] = pd.to_numeric(disc_df[c], errors='coerce')
+                                # We only care about the elite horses for system building
+                                disc_df[f"{c} Tier"] = pd.cut(disc_df[c], bins=[0, 1, 3, 999], labels=["Rank 1", "Ranks 2-3", "Garbage"])
+                                smart_cols.append(f"{c} Tier")
                                 
+                        # C. Macro Conditions Only
+                        if 'Race Type' in disc_df.columns: smart_cols.append('Race Type')
+                        if 'H/Cap' in disc_df.columns: smart_cols.append('H/Cap')
+                        
                         # --- 2. RUN COMBINATIONS ---
                         combos = []
                         for r in range(1, search_depth + 1):
@@ -523,22 +518,22 @@ if st.session_state.get("is_admin") and st.session_state.get("show_admin_insight
                         progress_bar = st.progress(0)
                         total_combos = len(combos)
                         
+                        # ANTI-OVERFITTING SAFETY NET: Force a minimum sample size to kill random variance
+                        safe_min_bets = max(min_bets, 50) 
+                        
                         for i, combo in enumerate(combos):
                             factors = list(combo)
                             grp = disc_df.groupby(factors, observed=False).agg(
                                 Bets=('Horse', 'count'), Wins=('Is_Win', 'sum'), Profit=('Win P/L <2%', 'sum')
                             ).reset_index()
                             
-                            grp = grp[grp['Bets'] >= min_bets]
-                            
-                            # Ignore rows with unknown prices
-                            if 'Price Bracket' in factors:
-                                grp = grp[grp['Price Bracket'] != 'Unknown']
+                            # Enforce the strict volume threshold
+                            grp = grp[grp['Bets'] >= safe_min_bets]
                                 
-                            # STRICTION: Remove "junk" tiers. A system is only logical if it targets the top.
+                            # Remove "Garbage" tiers so it doesn't suggest betting Rank 14s
                             for f in factors:
                                 if "Tier" in f:
-                                    grp = grp[~grp[f].isin(["Rank 6+", "Ranks 4-5"])]
+                                    grp = grp[grp[f] != "Garbage"]
                             
                             if not grp.empty:
                                 grp['Strike Rate (%)'] = (grp['Wins'] / grp['Bets']) * 100
@@ -547,7 +542,6 @@ if st.session_state.get("is_admin") and st.session_state.get("show_admin_insight
                                 winners = grp[(grp['Strike Rate (%)'] >= min_sr) & (grp['Win ROI (%)'] >= min_roi)].copy()
                                 
                                 for _, w in winners.iterrows():
-                                    # Clean up the names for the UI (Remove " Tier")
                                     rule_name = " + ".join([f"{f.replace(' Tier', '')}: {w[f]}" for f in factors])
                                     discovered_systems.append({
                                         "Winning Rule": rule_name,
@@ -562,8 +556,7 @@ if st.session_state.get("is_admin") and st.session_state.get("show_admin_insight
                         progress_bar.empty()
                         
                         if discovered_systems:
-                            st.success(f"🔥 Found {len(discovered_systems)} logical rules meeting your exact targets!")
-                            # Drop duplicates in case multiple paths found the same rule
+                            st.success(f"🔥 Found {len(discovered_systems)} robust rules (All enforced to have Min {safe_min_bets} bets)!")
                             res_df = pd.DataFrame(discovered_systems).drop_duplicates(subset=["Winning Rule"])
                             
                             sort_map = {"Win P/L": "Win P/L", "Win ROI (%)": "ROI (%)", "Win S/R (%)": "S/R (%)"}
@@ -572,7 +565,7 @@ if st.session_state.get("is_admin") and st.session_state.get("show_admin_insight
                             
                             st.dataframe(res_df, use_container_width=True, hide_index=True)
                         else:
-                            st.warning("No logical combinations met your strict targets. Try lowering your ROI/SR goals.")
+                            st.warning(f"No robust combinations found. (Filtered for a strict minimum of {safe_min_bets} bets to prevent random luck). Try lowering targets.")
         else:
             st.markdown(f"### 🏆 System Analysis for {race_filter} Races")
             
