@@ -473,8 +473,72 @@ if st.session_state.get("is_admin") and st.session_state.get("show_admin_insight
         
         st.markdown("---")
         
-        if not selected_factors:
-            st.warning("⚠️ Please select at least one factor from the dropdown above to generate insights.")
+if not selected_factors:
+            st.info("💡 Leave the factors box empty and use the Auto-Discover Engine to find winning combinations.")
+            
+            c_btn, c_depth = st.columns([1, 1])
+            with c_depth:
+                search_depth = st.radio("Search Depth:", [1, 2], index=1, horizontal=True, help="1 = Single factors (e.g. Speed Rank 1). 2 = Paired factors (e.g. Speed Rank 1 + PRB Rank 2).")
+            
+            with c_btn:
+                st.markdown("<br>", unsafe_allow_html=True)
+                if st.button("🚀 Auto-Discover Golden Rules", type="primary", use_container_width=True):
+                    import itertools
+                    with st.spinner(f"Mining database for systems hitting {min_sr}% S/R and {min_roi}% ROI..."):
+                        discovered_systems = []
+                        
+                        # Generate combinations of the available columns
+                        combos = []
+                        for r in range(1, search_depth + 1):
+                            combos.extend(list(itertools.combinations(avail_cols, r)))
+                            
+                        progress_bar = st.progress(0)
+                        total_combos = len(combos)
+                        
+                        for i, combo in enumerate(combos):
+                            factors = list(combo)
+                            grp = ins_df.groupby(factors, observed=False).agg(
+                                Bets=('Horse', 'count'), Wins=('Is_Win', 'sum'), Profit=('Win P/L <2%', 'sum')
+                            ).reset_index()
+                            
+                            grp = grp[grp['Bets'] >= min_bets]
+                            if 'Price Bracket' in factors:
+                                grp = grp[grp['Price Bracket'] != 'Unknown']
+                                
+                            if not grp.empty:
+                                grp['Strike Rate (%)'] = (grp['Wins'] / grp['Bets']) * 100
+                                grp['Win ROI (%)'] = (grp['Profit'] / grp['Bets']) * 100
+                                
+                                # Apply the user's strict targets
+                                winners = grp[(grp['Strike Rate (%)'] >= min_sr) & (grp['Win ROI (%)'] >= min_roi)].copy()
+                                
+                                for _, w in winners.iterrows():
+                                    rule_name = " + ".join([f"{f}: {int(w[f]) if isinstance(w[f], float) and w[f].is_integer() else w[f]}" for f in factors])
+                                    discovered_systems.append({
+                                        "Winning Rule": rule_name,
+                                        "Factors Used": " & ".join(factors),
+                                        "Bets": int(w['Bets']),
+                                        "Wins": int(w['Wins']),
+                                        "S/R (%)": round(w['Strike Rate (%)'], 1),
+                                        "ROI (%)": round(w['Win ROI (%)'], 1),
+                                        "Win P/L": round(w['Profit'], 2)
+                                    })
+                            progress_bar.progress((i + 1) / total_combos)
+                            
+                        progress_bar.empty()
+                        
+                        if discovered_systems:
+                            st.success(f"🔥 Found {len(discovered_systems)} rules meeting your exact targets!")
+                            res_df = pd.DataFrame(discovered_systems)
+                            
+                            # Sort by whatever metric the user selected at the top
+                            sort_map = {"Win P/L": "Win P/L", "Win ROI (%)": "ROI (%)", "Win S/R (%)": "S/R (%)"}
+                            sort_col = sort_map.get(target_metric, 'Win P/L')
+                            res_df = res_df.sort_values(sort_col, ascending=False).head(100)
+                            
+                            st.dataframe(res_df, use_container_width=True, hide_index=True)
+                        else:
+                            st.warning("No factor combinations met your strict targets. Try lowering your ROI/SR goals or reducing minimum bets.")
         else:
             st.markdown(f"### 🏆 System Analysis for {race_filter} Races")
             
