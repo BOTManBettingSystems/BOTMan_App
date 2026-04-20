@@ -460,6 +460,14 @@ if st.session_state.get("is_admin") and st.session_state.get("show_admin_insight
         
         selected_factors = st.multiselect("Select Factors to Combine (Choose 1 to 4):", avail_cols, default=['No. of Top', 'Speed Rank'])
         
+        # --- NEW: OBJECTIVE TARGET FILTERS ---
+        st.markdown("<div style='margin-top: 10px; margin-bottom: 5px; font-weight: bold; color: #1a3a5f;'>🎯 Filter by Objective Targets:</div>", unsafe_allow_html=True)
+        o_col1, o_col2 = st.columns(2)
+        with o_col1:
+            min_sr = st.number_input("Minimum Win Strike Rate (%):", min_value=0.0, max_value=100.0, value=0.0, step=1.0)
+        with o_col2:
+            min_roi = st.number_input("Minimum Win ROI (%):", min_value=-100.0, max_value=1000.0, value=0.0, step=5.0)
+            
         if race_filter != "All":
             ins_df = ins_df[ins_df['Race Type'] == race_filter]
         
@@ -490,79 +498,84 @@ if st.session_state.get("is_admin") and st.session_state.get("show_admin_insight
                 grp['Place ROI (%)'] = (grp['Place_Profit'] / grp['Bets']) * 100
                 grp['Total P/L'] = grp['Profit'] + grp['Place_Profit']
                 
-                if target_metric == "Logical Grouping (By Factor)":
-                    ascending_sorts = []
-                    for factor in selected_factors:
-                        if factor == 'No. of Top':
-                            ascending_sorts.append(False) 
-                        else:
-                            ascending_sorts.append(True)  
-                    grp = grp.sort_values(by=selected_factors, ascending=ascending_sorts)
+                # --- APPLY THE NEW OBJECTIVE FILTERS ---
+                grp = grp[(grp['Strike Rate (%)'] >= min_sr) & (grp['Win ROI (%)'] >= min_roi)]
+                
+                if grp.empty:
+                    st.info(f"No factor combinations met your strict targets (Min {min_sr}% S/R and {min_roi}% ROI). Try lowering your objectives.")
                 else:
-                    sort_map = {
-                        "Win P/L": "Profit",
-                        "Win ROI (%)": "Win ROI (%)",
-                        "Win S/R (%)": "Strike Rate (%)",
-                        "Place P/L": "Place_Profit",
-                        "Place ROI (%)": "Place ROI (%)",
-                        "Place S/R (%)": "Place SR (%)"
-                    }
-                    sort_col = sort_map.get(target_metric, 'Profit')
-                    grp = grp.sort_values(by=sort_col, ascending=False).head(100)
-                
-                html_table = """
-                <style>
-                    .builder-table { border-collapse: collapse; width: 100%; min-width: 900px; font-size: 14px; font-family: sans-serif; }
-                    .builder-table th, .builder-table td { border: 1px solid #ccc; padding: 4px; text-align: center; white-space: nowrap; }
-                    .left-align { text-align: left !important; padding-left: 8px !important; }
-                    .divider { border-left: 3px solid #1a3a5f !important; }
-                </style>
-                <div class="scrollable-table">
-                <table class="builder-table">
-                    <thead><tr style="background-color: #1a3a5f; color: white;">
-                """
-                
-                for factor in selected_factors:
-                    html_table += f"<th>{factor}</th>"
+                    if target_metric == "Logical Grouping (By Factor)":
+                        ascending_sorts = []
+                        for factor in selected_factors:
+                            if factor == 'No. of Top':
+                                ascending_sorts.append(False) 
+                            else:
+                                ascending_sorts.append(True)  
+                        grp = grp.sort_values(by=selected_factors, ascending=ascending_sorts)
+                    else:
+                        sort_map = {
+                            "Win P/L": "Profit",
+                            "Win ROI (%)": "Win ROI (%)",
+                            "Win S/R (%)": "Strike Rate (%)",
+                            "Place P/L": "Place_Profit",
+                            "Place ROI (%)": "Place ROI (%)",
+                            "Place S/R (%)": "Place SR (%)"
+                        }
+                        sort_col = sort_map.get(target_metric, 'Profit')
+                        grp = grp.sort_values(by=sort_col, ascending=False).head(100)
                     
-                html_table += """
-                        <th class="divider">Total Bets</th><th>Wins</th><th>Win P/L</th><th>Win S/R</th><th>Win ROI</th>
-                        <th class="divider">Places</th><th>Plc P/L</th><th>Plc S/R</th><th>Total P/L</th>
-                    </tr></thead><tbody>
-                """
-                
-                for _, r in grp.iterrows():
-                    html_table += "<tr>"
+                    html_table = """
+                    <style>
+                        .builder-table { border-collapse: collapse; width: 100%; min-width: 900px; font-size: 14px; font-family: sans-serif; }
+                        .builder-table th, .builder-table td { border: 1px solid #ccc; padding: 4px; text-align: center; white-space: nowrap; }
+                        .left-align { text-align: left !important; padding-left: 8px !important; }
+                        .divider { border-left: 3px solid #1a3a5f !important; }
+                    </style>
+                    <div class="scrollable-table">
+                    <table class="builder-table">
+                        <thead><tr style="background-color: #1a3a5f; color: white;">
+                    """
                     
                     for factor in selected_factors:
-                        val = r[factor]
-                        if isinstance(val, float):
-                            val = int(val) if val.is_integer() else f"{val:.1f}"
-                        html_table += f"<td style='color:#1a3a5f; font-weight:bold;'>{val}</td>"
+                        html_table += f"<th>{factor}</th>"
                         
-                    p_color = "#2e7d32" if r['Profit'] > 0 else "#d32f2f"
-                    r_color = "#2e7d32" if r['Win ROI (%)'] > 0 else "#d32f2f"
-                    pp_color = "#2e7d32" if r['Place_Profit'] > 0 else "#d32f2f"
-                    t_color = "#2e7d32" if r['Total P/L'] > 0 else "#d32f2f"
+                    html_table += """
+                                <th class="divider">Total Bets</th><th>Wins</th><th>Win P/L</th><th>Win S/R</th><th>Win ROI</th>
+                                <th class="divider">Places</th><th>Plc P/L</th><th>Plc S/R</th><th>Total P/L</th>
+                            </tr></thead><tbody>
+                    """
+                    
+                    for _, r in grp.iterrows():
+                        html_table += "<tr>"
                         
-                    html_table += f"""
-                        <td class="divider">{int(r['Bets'])}</td>
-                        <td>{int(r['Wins'])}</td>
-                        <td style="color:{p_color}; font-weight:bold;">£{r['Profit']:.2f}</td>
-                        <td>{r['Strike Rate (%)']:.1f}%</td>
-                        <td style="color:{r_color}; font-weight:bold;">{r['Win ROI (%)']:.1f}%</td>
-                        <td class="divider">{int(r['Places'])}</td>
-                        <td style="color:{pp_color}; font-weight:bold;">£{r['Place_Profit']:.2f}</td>
-                        <td>{r['Place SR (%)']:.1f}%</td>
-                        <td style="color:{t_color}; font-weight:bold;">£{r['Total P/L']:.2f}</td>
-                    </tr>"""
-                html_table += "</tbody></table></div>"
-                st.markdown(html_table, unsafe_allow_html=True)
+                        for factor in selected_factors:
+                            val = r[factor]
+                            if isinstance(val, float):
+                                val = int(val) if val.is_integer() else f"{val:.1f}"
+                            html_table += f"<td style='color:#1a3a5f; font-weight:bold;'>{val}</td>"
+                            
+                        p_color = "#2e7d32" if r['Profit'] > 0 else "#d32f2f"
+                        r_color = "#2e7d32" if r['Win ROI (%)'] > 0 else "#d32f2f"
+                        pp_color = "#2e7d32" if r['Place_Profit'] > 0 else "#d32f2f"
+                        t_color = "#2e7d32" if r['Total P/L'] > 0 else "#d32f2f"
+                            
+                        html_table += f"""
+                            <td class="divider">{int(r['Bets'])}</td>
+                            <td>{int(r['Wins'])}</td>
+                            <td style="color:{p_color}; font-weight:bold;">£{r['Profit']:.2f}</td>
+                            <td>{r['Strike Rate (%)']:.1f}%</td>
+                            <td style="color:{r_color}; font-weight:bold;">{r['Win ROI (%)']:.1f}%</td>
+                            <td class="divider">{int(r['Places'])}</td>
+                            <td style="color:{pp_color}; font-weight:bold;">£{r['Place_Profit']:.2f}</td>
+                            <td>{r['Place SR (%)']:.1f}%</td>
+                            <td style="color:{t_color}; font-weight:bold;">£{r['Total P/L']:.2f}</td>
+                        </tr>"""
+                    html_table += "</tbody></table></div>"
+                    st.markdown(html_table, unsafe_allow_html=True)
             else:
                 st.info(f"No combinations found with at least {min_bets} bets.")
     else:
         st.warning("No data available.")
-
 else:
     # --- NORMAL DASHBOARD VIEW ---
     with st.sidebar:
