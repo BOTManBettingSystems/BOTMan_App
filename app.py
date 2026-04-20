@@ -473,7 +473,7 @@ if st.session_state.get("is_admin") and st.session_state.get("show_admin_insight
         
         st.markdown("---")
         
-if not selected_factors:
+        if not selected_factors:
             st.info("💡 Leave the factors box empty and use the Auto-Discover Engine to find winning combinations.")
             
             c_btn, c_depth = st.columns([1, 1])
