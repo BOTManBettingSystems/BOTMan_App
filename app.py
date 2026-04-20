@@ -168,9 +168,10 @@ def load_ods_master():
     if os.path.exists("BOTManSystemsMaster.ods"):
         return pd.read_excel("BOTManSystemsMaster.ods", engine="odf")
     return None
+    
 # --- 6. OPTIMIZATION ENGINE FOR TAB 4 & ADMIN ---
 @st.cache_data(show_spinner=False)
-def prep_system_builder_data(_df, _model, feats, _shadow_model=None, shadow_feats=None, is_live_today=False):
+def prep_system_builder_data(_df, _model, feats, _shadow_model=None, shadow_feats=None, is_live_today=False, use_vault=True):
     b_df = _df.copy()
     b_df.columns = b_df.columns.str.strip()
     
@@ -185,7 +186,7 @@ def prep_system_builder_data(_df, _model, feats, _shadow_model=None, shadow_feat
         b_df = b_df[b_df.get('Fin Pos', 0) > 0].copy()
     
     # --- THE PREDICTION VAULT BRIDGE ---
-    if os.path.exists("BOTMan_Prediction_Vault.csv") and not is_live_today:
+    if os.path.exists("BOTMan_Prediction_Vault.csv") and not is_live_today and use_vault:
         vault_df = pd.read_csv("BOTMan_Prediction_Vault.csv")
         
         # Force strict string matching to prevent subtle join failures
@@ -1042,8 +1043,21 @@ else:
                 st.session_state.form_reset_counter += 1
                 st.rerun()
 
+        # --- THE BENCHMARK TOGGLE (ADMIN ONLY) ---
+        if st.session_state.get("is_admin"):
+            ai_mode = st.radio("🧠 **AI Backtest Engine (Admin Only):**", 
+                              ["💾 Use Prediction Vault (Historical Reality)", "⚡ Use Today's Live Brain (Benchmark Test)"], 
+                              horizontal=True, 
+                              help="The Vault shows you what the AI predicted on the actual day. The Live Brain applies today's brand new logic to the past.")
+            use_vault_bool = "Vault" in ai_mode
+        else:
+            use_vault_bool = True  # Guests are completely locked into historical reality
+            
+        st.markdown("---")
+
         if df_all is not None and not df_all.empty:
-            b_df = prep_system_builder_data(df_all, model, feats, shadow_model, shadow_feats)
+            # Notice we pass the dynamic boolean to the engine here
+            b_df = prep_system_builder_data(df_all, model, feats, shadow_model, shadow_feats, is_live_today=False, use_vault=use_vault_bool)
 
             # --- UPDATED: The form now uses the dynamic counter ID ---
             with st.form(f"builder_form_{st.session_state.form_reset_counter}"):
