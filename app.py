@@ -194,9 +194,13 @@ def prep_system_builder_data(_df, _model, feats, _shadow_model=None, shadow_feat
                 vault_df[c] = vault_df[c].astype(str).str.strip()
                 b_df[c] = b_df[c].astype(str).str.strip()
                 
+        # FIX: Explicitly rename columns before merge so we don't rely on Pandas suffix behavior
+        v_sub = vault_df[['Date', 'Time', 'Course', 'Horse', 'ML_Prob', 'Rank', 'Value Price']].rename(
+            columns={'ML_Prob': 'ML_Prob_vault', 'Rank': 'Rank_vault', 'Value Price': 'Value Price_vault'}
+        )
+        
         # Merge the frozen AI opinions onto the historical facts
-        b_df = pd.merge(b_df, vault_df[['Date', 'Time', 'Course', 'Horse', 'ML_Prob', 'Rank', 'Value Price']], 
-                        on=['Date', 'Time', 'Course', 'Horse'], how='left', suffixes=('', '_vault'))
+        b_df = pd.merge(b_df, v_sub, on=['Date', 'Time', 'Course', 'Horse'], how='left')
                         
         # Identify which horses are brand new and missing from the Vault
         missing_mask = b_df['ML_Prob_vault'].isna()
@@ -207,8 +211,8 @@ def prep_system_builder_data(_df, _model, feats, _shadow_model=None, shadow_feat
             new_probs = _model.predict_proba(new_horses[feats].fillna(0))[:, 1]
             b_df.loc[missing_mask, 'ML_Prob'] = new_probs
             
-            # Calculate temporary Rank and Value for the new ones
-            b_df['ML_Prob'] = b_df['ML_Prob_vault'].fillna(b_df['ML_Prob'])
+            # Combine the frozen vault data with the new live calculations
+            b_df['ML_Prob'] = b_df['ML_Prob_vault'].fillna(b_df.get('ML_Prob'))
             b_df['Rank'] = b_df['Rank_vault'].fillna(b_df.groupby(['Date_Key', 'Time', 'Course'])['ML_Prob'].rank(ascending=False, method='min'))
             b_df['Value Price'] = b_df['Value Price_vault'].fillna(1 / b_df['ML_Prob'])
             
@@ -220,7 +224,7 @@ def prep_system_builder_data(_df, _model, feats, _shadow_model=None, shadow_feat
             b_df['Rank'] = b_df['Rank_vault']
             b_df['Value Price'] = b_df['Value Price_vault']
             
-        b_df = b_df.drop(columns=[c for c in b_df.columns if '_vault' in c])
+        b_df = b_df.drop(columns=['ML_Prob_vault', 'Rank_vault', 'Value Price_vault'])
         
     else:
         # Fallback (or if it's today's live predictions)
