@@ -484,39 +484,73 @@ if st.session_state.get("is_admin") and st.session_state.get("show_admin_insight
                 st.markdown("<br>", unsafe_allow_html=True)
                 if st.button("🚀 Auto-Discover Golden Rules", type="primary", use_container_width=True):
                     import itertools
-                    with st.spinner(f"Mining database for systems hitting {min_sr}% S/R and {min_roi}% ROI..."):
+                    with st.spinner(f"Mining database for logical systems hitting {min_sr}% S/R and {min_roi}% ROI..."):
                         discovered_systems = []
                         
-                        # Generate combinations of the available columns
+                        # --- 1. SMART FEATURE ENGINEERING ---
+                        # We create a temporary dataframe just for discovery that thinks logically
+                        disc_df = ins_df.copy()
+                        smart_cols = []
+                        
+                        # A. Create the "Consensus" Feature (How many ratings agree?)
+                        core_ranks = [c for c in ['Speed Rank', 'Form Rank', 'MSAI Rank', 'PRB Rank', 'Primary Rank', 'Pure Rank'] if c in disc_df.columns]
+                        if core_ranks:
+                            disc_df['Ratings in Top 3'] = (disc_df[core_ranks] <= 3).sum(axis=1).astype(str) + f" of {len(core_ranks)}"
+                            smart_cols.append('Ratings in Top 3')
+                            
+                        # B. Create Logical Rank Bins
+                        rank_cols = [c for c in analysis_cols if 'Rank' in c and c in disc_df.columns]
+                        for c in rank_cols:
+                            disc_df[c] = pd.to_numeric(disc_df[c], errors='coerce')
+                            # Bin them logically: 1st, 2nd-3rd, 4th-5th, and Garbage
+                            disc_df[f"{c} Tier"] = pd.cut(disc_df[c], bins=[0, 1, 3, 5, 999], labels=["Rank 1", "Ranks 2-3", "Ranks 4-5", "Rank 6+"])
+                            smart_cols.append(f"{c} Tier")
+                            
+                        # C. Add Categorical Data
+                        cat_cols = ['Class', 'Class Move', 'Price Bracket']
+                        if 'Age' in disc_df.columns: cat_cols.append('Age')
+                        if 'Sex' in disc_df.columns: cat_cols.append('Sex')
+                        
+                        for c in cat_cols:
+                            if c in disc_df.columns:
+                                smart_cols.append(c)
+                                
+                        # --- 2. RUN COMBINATIONS ---
                         combos = []
                         for r in range(1, search_depth + 1):
-                            combos.extend(list(itertools.combinations(avail_cols, r)))
+                            combos.extend(list(itertools.combinations(smart_cols, r)))
                             
                         progress_bar = st.progress(0)
                         total_combos = len(combos)
                         
                         for i, combo in enumerate(combos):
                             factors = list(combo)
-                            grp = ins_df.groupby(factors, observed=False).agg(
+                            grp = disc_df.groupby(factors, observed=False).agg(
                                 Bets=('Horse', 'count'), Wins=('Is_Win', 'sum'), Profit=('Win P/L <2%', 'sum')
                             ).reset_index()
                             
                             grp = grp[grp['Bets'] >= min_bets]
+                            
+                            # Ignore rows with unknown prices
                             if 'Price Bracket' in factors:
                                 grp = grp[grp['Price Bracket'] != 'Unknown']
                                 
+                            # STRICTION: Remove "junk" tiers. A system is only logical if it targets the top.
+                            for f in factors:
+                                if "Tier" in f:
+                                    grp = grp[~grp[f].isin(["Rank 6+", "Ranks 4-5"])]
+                            
                             if not grp.empty:
                                 grp['Strike Rate (%)'] = (grp['Wins'] / grp['Bets']) * 100
                                 grp['Win ROI (%)'] = (grp['Profit'] / grp['Bets']) * 100
                                 
-                                # Apply the user's strict targets
                                 winners = grp[(grp['Strike Rate (%)'] >= min_sr) & (grp['Win ROI (%)'] >= min_roi)].copy()
                                 
                                 for _, w in winners.iterrows():
-                                    rule_name = " + ".join([f"{f}: {int(w[f]) if isinstance(w[f], float) and w[f].is_integer() else w[f]}" for f in factors])
+                                    # Clean up the names for the UI (Remove " Tier")
+                                    rule_name = " + ".join([f"{f.replace(' Tier', '')}: {w[f]}" for f in factors])
                                     discovered_systems.append({
                                         "Winning Rule": rule_name,
-                                        "Factors Used": " & ".join(factors),
                                         "Bets": int(w['Bets']),
                                         "Wins": int(w['Wins']),
                                         "S/R (%)": round(w['Strike Rate (%)'], 1),
@@ -528,17 +562,17 @@ if st.session_state.get("is_admin") and st.session_state.get("show_admin_insight
                         progress_bar.empty()
                         
                         if discovered_systems:
-                            st.success(f"🔥 Found {len(discovered_systems)} rules meeting your exact targets!")
-                            res_df = pd.DataFrame(discovered_systems)
+                            st.success(f"🔥 Found {len(discovered_systems)} logical rules meeting your exact targets!")
+                            # Drop duplicates in case multiple paths found the same rule
+                            res_df = pd.DataFrame(discovered_systems).drop_duplicates(subset=["Winning Rule"])
                             
-                            # Sort by whatever metric the user selected at the top
                             sort_map = {"Win P/L": "Win P/L", "Win ROI (%)": "ROI (%)", "Win S/R (%)": "S/R (%)"}
                             sort_col = sort_map.get(target_metric, 'Win P/L')
                             res_df = res_df.sort_values(sort_col, ascending=False).head(100)
                             
                             st.dataframe(res_df, use_container_width=True, hide_index=True)
                         else:
-                            st.warning("No factor combinations met your strict targets. Try lowering your ROI/SR goals or reducing minimum bets.")
+                            st.warning("No logical combinations met your strict targets. Try lowering your ROI/SR goals.")
         else:
             st.markdown(f"### 🏆 System Analysis for {race_filter} Races")
             
