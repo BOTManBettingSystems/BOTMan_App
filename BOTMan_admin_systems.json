@@ -41,7 +41,7 @@
         "rank_1_only": false,
         "value_filter": "AI Value vs 7:30AM",
         "irish": "Any",
-        "age_min": 1,
+        "age_min": 4,
         "age_max": 20,
         "months": [
             "Jan",
