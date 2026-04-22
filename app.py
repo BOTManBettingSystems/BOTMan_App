@@ -1474,8 +1474,15 @@ else:
                     # 2. A/E Ratio (Actual / Expected)
                     ae_ratio = (total_wins / exp_wins) if exp_wins > 0 else 0.0
                     
-                    # 3. Chi Score (Statistical Significance)
-                    chi_score = ((total_wins - exp_wins)**2 / exp_wins) if exp_wins > 0 else 0.0
+                    # 3. Chi Score (Full Statistical Formula)
+                    if exp_wins > 0 and total_sys_bets > exp_wins:
+                        exp_losses = total_sys_bets - exp_wins
+                        actual_losses = total_sys_bets - total_wins
+                        win_chi = ((total_wins - exp_wins)**2) / exp_wins
+                        loss_chi = ((actual_losses - exp_losses)**2) / exp_losses
+                        chi_score = win_chi + loss_chi
+                    else:
+                        chi_score = 0.0
                     
                     # 4. Sortino Ratio (Industry Standard: Annualized Daily Returns)
                     daily_returns = chron_df.groupby(chron_df['Date_DT'].dt.date)['Win P/L <2%'].sum()
