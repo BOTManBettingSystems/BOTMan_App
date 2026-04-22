@@ -698,18 +698,25 @@ else:
                     df_p['isM'] = False
                 
                 df_p = df_p.sort_values(by=['Date', 'Time', 'Course', 'Rank'])
-                
                 ideal_csv_cols = ['Date', 'Time', 'Course', 'Horse', '7:30AM Price', 'ML_Prob', 'Rank', 'No. of Top']
                 existing_csv_cols = [c for c in ideal_csv_cols if c in df_p.columns]
-                csv_out = df_p[df_p['Rank'] <= 2][existing_csv_cols].copy()
+                
+                # Prepare both datasets
+                csv_out_top2 = df_p[df_p['Rank'] <= 2][existing_csv_cols].copy()
+                csv_out_full = df_p[existing_csv_cols].copy()
                 
                 timestamp = datetime.now().strftime('%d%m%y_%H%M%S')
-                file_name = f"BOTMan_AIPredictions_{timestamp}.csv"
+                file_top2 = f"BOTMan_Top2_AIPredictions_{timestamp}.csv"
+                file_full = f"BOTMan_Full_AIPredictions_{timestamp}.csv"
                 
-                col_dl, col_spacer, col_col = st.columns([1, 3, 0.5])
+                # Make room for the second button
+                col_dl1, col_dl2, col_spacer, col_col = st.columns([1.2, 1.2, 2.1, 0.5])
                 
-                with col_dl:
-                    st.download_button("Download CSV", csv_out.to_csv(index=False).encode('utf-8'), file_name)
+                with col_dl1:
+                    st.download_button("📥 Download Top 2 (CSV)", csv_out_top2.to_csv(index=False).encode('utf-8'), file_top2)
+                
+                with col_dl2:
+                    st.download_button("📥 Download All (CSV)", csv_out_full.to_csv(index=False).encode('utf-8'), file_full)
                 
                 with col_col:
                     if st.button("Collapse All"): 
