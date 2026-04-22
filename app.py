@@ -1126,7 +1126,7 @@ else:
                     st.info("To see live performance tracking, please upload 'BOTManSystemsMaster.ods' to the root folder.")
 # --- Page 4: Mini SYSTEM BUILDER ---
     elif app_mode == "🛠️ System Builder":
-        # --- NEW: THE DYNAMIC RESET HACK ---
+        # --- THE DYNAMIC RESET HACK ---
         if "form_reset_counter" not in st.session_state:
             st.session_state.form_reset_counter = 0
         if "sys_defaults" not in st.session_state:
@@ -1160,10 +1160,8 @@ else:
         st.markdown("---")
 
         if df_all is not None and not df_all.empty:
-            # Notice we pass the dynamic boolean to the engine here
             b_df = prep_system_builder_data(df_all, model, feats, shadow_model, shadow_feats, is_live_today=False, use_vault=use_vault_bool)
 
-            # --- UPDATED: The form now uses the dynamic counter ID ---
             with st.form(f"builder_form_{st.session_state.form_reset_counter}"):
                 st.markdown("### Core Filters")
                 
@@ -1201,8 +1199,8 @@ else:
                     selected_hcap = st.multiselect("Handicap Status", hcap_types, default=safe_h_types if safe_h_types else hcap_types)
                 with c2:
                     p_col1, p_col2 = st.columns(2)
-                    with p_col1: price_min = st.number_input("Min Price", 0.0, 1000.0, float(defs.get('price_min', 0.0)), 0.5)
-                    with p_col2: price_max = st.number_input("Max Price", 0.0, 1000.0, float(defs.get('price_max', 1000.0)), 0.5)
+                    with p_col1: price_min = st.number_input("Min Price (7:30AM)", 0.0, 1000.0, float(defs.get('price_min', 0.0)), 0.5)
+                    with p_col2: price_max = st.number_input("Max Price (7:30AM)", 0.0, 1000.0, float(defs.get('price_max', 1000.0)), 0.5)
                     min_prob_gap = st.number_input("Minimum Prob Gap (%)", -100.0, 50.0, float(defs.get('min_prob_gap', -1.0) * 100), 0.5) / 100
                 with c3:
                     rnr_opts = ["2-7", "8-12", "13-16", ">16"]
@@ -1247,7 +1245,6 @@ else:
                 
                 st.markdown("### 📊 Display Options")
                 
-                # Comprehensive list of all possible grouping columns
                 master_group_opts = [
                     'Race Type', 'H/Cap', 'Price Bracket', 'Month_Yr', 'Course', 
                     'Class', 'Class Move', 'No. of Rnrs', 'Age', 'Sex', 'Irish?', 'Irish',
@@ -1256,20 +1253,16 @@ else:
                     'PRB Rank', 'Trainer PRB Rank', 'Jockey PRB Rank'
                 ]
                 
-                # Only show options that actually exist in the loaded CSV (plus Month_Yr which we generate)
                 valid_group_opts = [c for c in master_group_opts if c in b_df.columns or c == 'Month_Yr']
-                
                 saved_groupings = defs.get('groupby', ['Race Type', 'H/Cap', 'Price Bracket'])
                 safe_groupings = [g for g in saved_groupings if g in valid_group_opts]
                 
-                # Fallback in case a saved grouping is completely invalid
                 if not safe_groupings and 'Race Type' in valid_group_opts:
                     safe_groupings = ['Race Type']
                     
                 selected_groupby = st.multiselect("Group Breakdown Table By (Select up to 3):", valid_group_opts, default=safe_groupings, max_selections=3)
 
                 with st.expander("📊 Advanced Rank Filters", expanded=False):
-                    # --- UPDATED: Added Top 4 and Top 5 ---
                     rank_opts = ["Any", "Rank 1", "Top 2", "Top 3", "Top 4", "Top 5"]
                     def get_r_idx(col_name):
                         val = defs.get('ranks', {}).get(col_name, "Any")
@@ -1386,7 +1379,6 @@ else:
                     if irish_f == "Y (Yes)": mask = mask & (t_irish_series == 'Y')
                     elif irish_f == "No (Blank)": mask = mask & (t_irish_series != 'Y')
 
-                # --- UPDATED: Added Top 4 and Top 5 logic here ---
                 def apply_rank_filter(df_mask, current_df, col_name, setting):
                     if setting != "Any" and col_name in current_df.columns:
                         num_col = pd.to_numeric(current_df[col_name], errors='coerce')
@@ -1412,18 +1404,14 @@ else:
                 df_filtered = b_df[mask].copy()
 
                 if not df_filtered.empty:
-                    # --- NEW: Generate the raw historical data CSV ---
                     hist_csv_data_out = df_filtered.to_csv(index=False).encode('utf-8')
                     sys_timestamp = datetime.now().strftime('%d%m%y_%H%M%S')
 
-                    # 1. Ensure Month_Yr exists dynamically
                     if 'Month_Yr' not in df_filtered.columns and 'Date_DT' in df_filtered.columns:
-                        df_filtered['Month_Yr'] = df_filtered['Date_DT'].dt.strftime('%Y-%m') # e.g. 2026-04 (sorts perfectly)
+                        df_filtered['Month_Yr'] = df_filtered['Date_DT'].dt.strftime('%Y-%m')
 
-                    # 2. Fallback if user clears the box completely
                     if not selected_groupby: selected_groupby = ['Race Type', 'H/Cap', 'Price Bracket']
 
-                    # 3. Dynamic Grouping
                     breakdown = df_filtered.groupby(selected_groupby, observed=False).agg(
                         Bets=('Horse', 'count'), Wins=('Is_Win', 'sum'), Win_Profit=('Win P/L <2%', 'sum'), Places=('Is_Place', 'sum'), Place_Profit=('Place P/L <2%', 'sum')
                     ).reset_index()
@@ -1435,15 +1423,41 @@ else:
                     breakdown['Total P/L'] = breakdown['Win_Profit'] + breakdown['Place_Profit']
                     breakdown = breakdown.sort_values(by=selected_groupby)
 
+                    # Calculate Base KPIs
                     total_sys_bets = breakdown['Bets'].sum()
                     total_sys_profit = breakdown['Total P/L'].sum()
+                    total_wins = breakdown['Wins'].sum()
+                    total_places = breakdown['Places'].sum()
+                    total_win_profit = breakdown['Win_Profit'].sum()
+                    total_place_profit = breakdown['Place_Profit'].sum()
                     overall_roi = (total_sys_profit / total_sys_bets * 100) if total_sys_bets > 0 else 0
                     
                     kpis = [
-                        total_sys_bets, breakdown['Wins'].sum(), breakdown['Places'].sum(), 
-                        breakdown['Win_Profit'].sum(), breakdown['Place_Profit'].sum(),
-                        overall_roi
+                        total_sys_bets, total_wins, total_places, 
+                        total_win_profit, total_place_profit, overall_roi
                     ]
+                    
+                    # --- ADVANCED KPIs (LLR & MAX DD) ---
+                    chron_df = df_filtered.sort_values(by=['Date_DT', 'Time'])
+                    
+                    # Longest Losing Run (LLR) based on Win ONLY
+                    is_loss = (chron_df['Is_Win'] == 0).astype(int)
+                    losing_streaks = is_loss.groupby((is_loss != is_loss.shift()).cumsum()).sum()
+                    llr = int(losing_streaks.max()) if not losing_streaks.empty else 0
+                    
+                    # Maximum Drawdown (Max DD) based on Win ONLY
+                    cum_profit = chron_df['Win P/L <2%'].cumsum()
+                    running_max = cum_profit.cummax()
+                    drawdowns = running_max - cum_profit
+                    max_dd = float(drawdowns.max()) if not drawdowns.empty else 0.0
+                    
+                    # Strike Rates & ROI
+                    win_sr = (total_wins / total_sys_bets * 100) if total_sys_bets > 0 else 0.0
+                    win_roi = (total_win_profit / total_sys_bets * 100) if total_sys_bets > 0 else 0.0
+                    place_sr = (total_places / total_sys_bets * 100) if total_sys_bets > 0 else 0.0
+                    place_roi = (total_place_profit / total_sys_bets * 100) if total_sys_bets > 0 else 0.0
+                    
+                    adv_kpis = [win_sr, win_roi, place_sr, place_roi, llr, max_dd]
 
                     qual_html_out, csv_data_out, timestamp_out = "", None, ""
                     val_bsp_warning = value_filter in ["Value vs BSP", "AI Value vs BSP", "My Value vs BSP"]
@@ -1505,11 +1519,9 @@ else:
                             for _, q_row in t_filtered.iterrows(): qual_html_out += f"<tr><td class='center-text'>{q_row['Date']}</td><td class='center-text'>{q_row['Time']}</td><td class='left-align'>{q_row['Course']}</td><td class='left-align'><b>{q_row['Horse']}</b></td><td class='center-text'>{q_row['7:30AM Price']:.2f}</td><td class='center-text'><b>{int(q_row.get('Pure Rank', 0))}</b></td></tr>"
                             qual_html_out += "</tbody></table></div>"
 
-                    # 4. Dynamic HTML Table Generation
                     html_table_out = '<style>.builder-table { border-collapse: collapse; width: 100%; min-width: 900px; font-size: 14px; font-family: sans-serif; } .builder-table th, .builder-table td { border: 1px solid #ccc; padding: 4px; text-align: center; white-space: nowrap; } .builder-table tr:hover { background-color: #0000FF !important; color: white !important; } .left-align { text-align: left !important; padding-left: 8px !important; }</style>'
                     html_table_out += '<div class="scrollable-table"><table class="builder-table"><thead><tr style="background-color: #f0f2f6; color: black;">'
                     
-                    # Generate headers dynamically based on selection
                     for col in selected_groupby:
                         html_table_out += f'<th class="left-align">{col}</th>'
                         
@@ -1519,7 +1531,6 @@ else:
                         t_col = "#2e7d32" if row['Total P/L'] >= 0 else "#d32f2f"
                         html_table_out += "<tr>"
                         
-                        # Generate row cells dynamically based on selection
                         for col in selected_groupby:
                             val = row[col]
                             if isinstance(val, float) and val.is_integer(): val = int(val)
@@ -1530,7 +1541,7 @@ else:
                     html_table_out += "</tbody></table></div>"
 
                     st.session_state['tab4_results'] = {
-                        'kpis': kpis, 'breakdown_html': html_table_out, 'qual_html': qual_html_out, 
+                        'kpis': kpis, 'adv_kpis': adv_kpis, 'breakdown_html': html_table_out, 'qual_html': qual_html_out, 
                         'csv': csv_data_out, 'timestamp': timestamp_out if timestamp_out else sys_timestamp, 
                         'val_warn': val_bsp_warning, 'hist_csv': hist_csv_data_out
                     }
@@ -1541,14 +1552,28 @@ else:
                 else:
                     res = st.session_state['tab4_results']
                     kpis = res['kpis']
+                    adv_kpis = res.get('adv_kpis', [0.0, 0.0, 0.0, 0.0, 0, 0.0])
+                    
                     st.markdown("### System Preview Performance")
+                    
+                    # Row 1: Base KPIs
                     kpi1, kpi2, kpi3, kpi4, kpi5, kpi6 = st.columns(6)
                     kpi1.metric("Total Bets", kpis[0])
                     kpi2.metric("Wins", kpis[1])
                     kpi3.metric("Places", kpis[2])
                     kpi4.metric("Win P/L", f"£{kpis[3]:.2f}")
                     kpi5.metric("Place P/L", f"£{kpis[4]:.2f}")
-                    kpi6.metric("Overall ROI", f"{kpis[5]:.2f}%")
+                    kpi6.metric("Total ROI", f"{kpis[5]:.2f}%")
+                    
+                    # Row 2: Advanced KPIs
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    r2_1, r2_2, r2_3, r2_4, r2_5, r2_6 = st.columns(6)
+                    r2_1.metric("Win S/R", f"{adv_kpis[0]:.1f}%")
+                    r2_2.metric("Win ROI", f"{adv_kpis[1]:.1f}%")
+                    r2_3.metric("Place S/R", f"{adv_kpis[2]:.1f}%")
+                    r2_4.metric("Place ROI", f"{adv_kpis[3]:.1f}%")
+                    r2_5.metric("LLR", int(adv_kpis[4]), help="Longest Losing Run (Consecutive losers)")
+                    r2_6.metric("Max. DD", f"£{adv_kpis[5]:.2f}", help="Maximum Drawdown (Biggest drop from peak profit)")
 
                     if res['qual_html'] != "":
                         st.markdown("<br>", unsafe_allow_html=True)
