@@ -1466,6 +1466,31 @@ else:
                     
                     adv_kpis = [win_sr, win_roi, place_sr, place_roi, llr, max_dd]
 
+                    # --- NEW: ELITE QUANT METRICS ---
+                    # 1. Expected Wins (Sum of implied probabilities from 7:30AM Prices)
+                    valid_prices = chron_df['7:30AM Price'][chron_df['7:30AM Price'] > 1.0]
+                    exp_wins = (1 / valid_prices).sum() if not valid_prices.empty else 0.0
+                    
+                    # 2. A/E Ratio (Actual / Expected)
+                    ae_ratio = (total_wins / exp_wins) if exp_wins > 0 else 0.0
+                    
+                    # 3. Chi Score (Statistical Significance)
+                    chi_score = ((total_wins - exp_wins)**2 / exp_wins) if exp_wins > 0 else 0.0
+                    
+                    # 4. Sortino Ratio
+                    returns = chron_df['Win P/L <2%']
+                    mean_return = returns.mean() if not returns.empty else 0.0
+                    downside_returns = returns[returns < 0]
+                    downside_var = (downside_returns**2).mean()
+                    downside_std = downside_var**0.5 if pd.notna(downside_var) and downside_var > 0 else 0.0001
+                    sortino = (mean_return / downside_std) * (total_sys_bets**0.5) if total_sys_bets > 0 else 0.0
+                    
+                    # 5. Ulcer Index (Root Mean Square of Drawdowns)
+                    ulcer_var = (drawdowns**2).mean()
+                    ulcer = ulcer_var**0.5 if pd.notna(ulcer_var) else 0.0
+                    
+                    quant_kpis = [ae_ratio, chi_score, sortino, ulcer]
+
                     qual_html_out, csv_data_out, timestamp_out = "", None, ""
                     val_bsp_warning = value_filter in ["Value vs BSP", "AI Value vs BSP", "My Value vs BSP"]
 
@@ -1548,7 +1573,7 @@ else:
                     html_table_out += "</tbody></table></div>"
 
                     st.session_state['tab4_results'] = {
-                        'kpis': kpis, 'adv_kpis': adv_kpis, 'breakdown_html': html_table_out, 'qual_html': qual_html_out, 
+                        'kpis': kpis, 'adv_kpis': adv_kpis, 'quant_kpis': quant_kpis, 'breakdown_html': html_table_out, 'qual_html': qual_html_out, 
                         'csv': csv_data_out, 'timestamp': timestamp_out if timestamp_out else sys_timestamp, 
                         'val_warn': val_bsp_warning, 'hist_csv': hist_csv_data_out
                     }
@@ -1560,6 +1585,7 @@ else:
                     res = st.session_state['tab4_results']
                     kpis = res['kpis']
                     adv_kpis = res.get('adv_kpis', [0.0, 0.0, 0.0, 0.0, 0, 0.0])
+                    quant = res.get('quant_kpis', [0.0, 0.0, 0.0, 0.0])
                     
                     st.markdown("### System Preview Performance")
                     
@@ -1581,6 +1607,14 @@ else:
                     r2_4.metric("Place ROI", f"{adv_kpis[3]:.1f}%")
                     r2_5.metric("LLR", int(adv_kpis[4]), help="Longest Losing Run (Consecutive losers)")
                     r2_6.metric("Max. DD", f"£{adv_kpis[5]:.2f}", help="Maximum Drawdown (Biggest drop from peak profit)")
+
+                    # Row 3: Quant Metrics
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    q1, q2, q3, q4 = st.columns(4)
+                    q1.metric("A/E Ratio", f"{quant[0]:.2f}", help="Actual vs Expected Wins. > 1.0 means the system beats the market. > 1.20 is elite.")
+                    q2.metric("Chi Score", f"{quant[1]:.1f}", help="Checks if profit is just luck. > 3.84 means 95% confidence it's real. > 6.63 is 99% confidence.")
+                    q3.metric("Sortino Ratio", f"{quant[2]:.2f}", help="Measures profit vs. 'bad' risk. > 1.0 is good. > 2.0 means the system is an incredibly smooth profit generator.")
+                    q4.metric("Ulcer Index", f"{quant[3]:.1f}", help="Measures drawdown depth and length. Lower is better. A high index means long, agonizing losing streaks.")
 
                     if res['qual_html'] != "":
                         st.markdown("<br>", unsafe_allow_html=True)
