@@ -1477,13 +1477,15 @@ else:
                     # 3. Chi Score (Statistical Significance)
                     chi_score = ((total_wins - exp_wins)**2 / exp_wins) if exp_wins > 0 else 0.0
                     
-                    # 4. Sortino Ratio
-                    returns = chron_df['Win P/L <2%']
-                    mean_return = returns.mean() if not returns.empty else 0.0
-                    downside_returns = returns[returns < 0]
-                    downside_var = (downside_returns**2).mean()
+                    # 4. Sortino Ratio (Industry Standard: Annualized Daily Returns)
+                    daily_returns = chron_df.groupby(chron_df['Date_DT'].dt.date)['Win P/L <2%'].sum()
+                    mean_daily = daily_returns.mean() if not daily_returns.empty else 0.0
+                    downside_daily = daily_returns[daily_returns < 0]
+                    downside_var = (downside_daily**2).mean()
                     downside_std = downside_var**0.5 if pd.notna(downside_var) and downside_var > 0 else 0.0001
-                    sortino = (mean_return / downside_std) * (total_sys_bets**0.5) if total_sys_bets > 0 else 0.0
+                    
+                    # Scale by sqrt(365) to annualize the daily racing returns
+                    sortino = (mean_daily / downside_std) * (365**0.5) if not daily_returns.empty else 0.0
                     
                     # 5. Ulcer Index (Root Mean Square of Drawdowns)
                     ulcer_var = (drawdowns**2).mean()
