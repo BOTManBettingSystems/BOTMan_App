@@ -1609,7 +1609,9 @@ else:
     
 # --- Page 5: RACE ANALYSIS ---
     elif app_mode == "🏇 Race Analysis":
-        st.header("🏇 Race Analysis")
+        c_head, c_dl = st.columns([3, 1])
+        with c_head:
+            st.header("🏇 Race Analysis")
         
         st.markdown('''<style>
             div[data-testid="stButton"] button p {
@@ -1622,6 +1624,28 @@ else:
         if df_today is not None and not df_today.empty:
             # We use the pre-calculated df_today instead of calling prep_system_builder_data again.
             ta_df = df_today.copy()
+            
+            with c_dl:
+                st.markdown("<br>", unsafe_allow_html=True)
+                # Define the exact columns you want for the offline sheet
+                dl_cols = ['Date', 'Time', 'Course', 'Horse', 'Primary Rank', 'Form Rank', 'Pure Rank']
+                avail_cols = [c for c in dl_cols if c in ta_df.columns]
+                
+                # Format the ranks as clean integers before exporting
+                dl_df = ta_df[avail_cols].copy()
+                for col in ['Primary Rank', 'Form Rank', 'Pure Rank']:
+                    if col in dl_df.columns:
+                        dl_df[col] = pd.to_numeric(dl_df[col], errors='coerce').fillna(0).astype(int)
+                
+                csv_data = dl_df.to_csv(index=False).encode('utf-8')
+                ts = datetime.now().strftime('%d%m%y_%H%M%S')
+                st.download_button(
+                    label="📥 Download Master CSV",
+                    data=csv_data,
+                    file_name=f"BOTMan_Race_Analysis_{ts}.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                )
             
             ta_df['Time'] = ta_df['Time'].astype(str).str.strip()
             ta_df['Course'] = ta_df['Course'].astype(str).str.strip()
