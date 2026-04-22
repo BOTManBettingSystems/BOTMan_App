@@ -1614,7 +1614,7 @@ else:
                     q1.metric("A/E Ratio", f"{quant[0]:.2f}", help="Actual vs Expected Wins. > 1.0 means the system beats the market. > 1.20 is elite.")
                     q2.metric("Chi Score", f"{quant[1]:.1f}", help="Checks if profit is just luck. > 3.84 means 95% confidence it's real. > 6.63 is 99% confidence.")
                     q3.metric("Sortino Ratio", f"{quant[2]:.2f}", help="Measures profit vs. 'bad' risk. > 1.0 is good. > 2.0 means the system is an incredibly smooth profit generator.")
-                    q4.metric("Ulcer Index", f"{quant[3]:.1f}", help="Measures drawdown depth and length. Lower is better. A high index means long, agonizing losing streaks.")
+                    q4.metric("Ulcer Index", f"{quant[3]:.1f}", help="Average drawdown depth in £/pts. The Scale: [0-10: Elite/Low Stress] | [10-25: Normal Variance] | [25-50: High Stress] | [50+: Unplayable Rollercoaster].")
 
                     if res['qual_html'] != "":
                         st.markdown("<br>", unsafe_allow_html=True)
