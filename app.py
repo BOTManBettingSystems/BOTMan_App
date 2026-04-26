@@ -103,40 +103,52 @@ def load_all_data():
             live_res_pool = df_all[df_all['Date_DT'] > split_date]
             df_live = pd.merge(ods_keys, live_res_pool, on=['Date_Key', 'Time', 'Course', 'Horse'], how='inner')
                 
-        # --- MODEL LOADING (INCLUDING CALIBRATED PRICER) ---
+        # --- MODEL LOADING (VERSION-SAFE FOR HUGGING FACE) ---
         model_file = "botman_models.pkl"
+        force_retrain = False
+        
         if os.path.exists(model_file):
-            with open(model_file, 'rb') as f:
-                saved_models = pickle.load(f)
-                clf = saved_models['clf']
-                shadow_clf = saved_models['shadow_clf']
-                cal_clf = saved_models.get('cal_clf') # Load new model if exists
+            try:
+                with open(model_file, 'rb') as f:
+                    saved_models = pickle.load(f)
+                    # CHECK: Does this file have the 3rd brain?
+                    if 'cal_clf' in saved_models:
+                        clf = saved_models['clf']
+                        shadow_clf = saved_models['shadow_clf']
+                        cal_clf = saved_models['cal_clf']
+                    else:
+                        force_retrain = True # Old 2-brain file found, ignore it
+            except Exception:
+                force_retrain = True
         else:
-            cal_clf = None # Trigger retraining below
+            force_retrain = True
 
-        if cal_clf is None:
-            clf = HistGradientBoostingClassifier(max_iter=100, learning_rate=0.08, max_depth=5, l2_regularization=2.0, random_state=42)
-            shadow_clf = HistGradientBoostingClassifier(max_iter=100, learning_rate=0.08, max_depth=5, l2_regularization=2.0, random_state=42)
-            
-            # THE LEASHED PRICER: High L2, shallow depth, large leaf requirements
-            cal_clf = HistGradientBoostingClassifier(
-                max_iter=100, 
-                learning_rate=0.05, 
-                max_depth=3, 
-                l2_regularization=15.0, 
-                min_samples_leaf=250, 
-                random_state=42
-            )
-            
-            train_df = df_all[df_all['Fin Pos'] > 0].tail(230000)
-            target = (train_df['Fin Pos'] == 1).astype(int)
-            clf.fit(train_df[feats], target)
-            shadow_clf.fit(train_df[shadow_feats], target)
-            cal_clf.fit(train_df[feats], target) # Train the pricer on the same main feature set
-            
-            gc.collect()
-            with open(model_file, 'wb') as f:
-                pickle.dump({'clf': clf, 'shadow_clf': shadow_clf, 'cal_clf': cal_clf}, f)
+        if force_retrain:
+            with st.spinner("🧠 Birthing the Triple-Brain Engine... Please wait (60s)"):
+                clf = HistGradientBoostingClassifier(max_iter=100, learning_rate=0.08, max_depth=5, l2_regularization=2.0, random_state=42)
+                shadow_clf = HistGradientBoostingClassifier(max_iter=100, learning_rate=0.08, max_depth=5, l2_regularization=2.0, random_state=42)
+                
+                # THE LEASHED PRICER
+                cal_clf = HistGradientBoostingClassifier(
+                    max_iter=100, 
+                    learning_rate=0.05, 
+                    max_depth=3, 
+                    l2_regularization=15.0, 
+                    min_samples_leaf=250, 
+                    random_state=42
+                )
+                
+                train_df = df_all[df_all['Fin Pos'] > 0].tail(230000)
+                target = (train_df['Fin Pos'] == 1).astype(int)
+                
+                clf.fit(train_df[feats], target)
+                shadow_clf.fit(train_df[shadow_feats], target)
+                cal_clf.fit(train_df[feats], target)
+                
+                # Save the new 3-brain version
+                with open(model_file, 'wb') as f:
+                    pickle.dump({'clf': clf, 'shadow_clf': shadow_clf, 'cal_clf': cal_clf}, f)
+                gc.collect()
         
         df_today = pd.read_csv("DailyAIPredictionsData.csv") if os.path.exists("DailyAIPredictionsData.csv") else None
         if df_today is not None:
