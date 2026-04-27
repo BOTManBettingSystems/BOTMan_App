@@ -214,7 +214,17 @@ def prep_system_builder_data(_df, _model, feats, _shadow_model=None, shadow_feat
         b_df['Date_DT'] = pd.to_datetime(b_df['Date_Key'], format='%y%m%d', errors='coerce')
         
     if not is_live_today:
-        b_df = b_df[b_df.get('Fin Pos', 0) > 0].copy()
+        b_df = b_df[pd.to_numeric(b_df.get('Fin Pos', 0), errors='coerce').fillna(0) > 0].copy()
+
+    # --- 🛡️ CRITICAL FIX: THE EMPTY DATAFRAME SHIELD ---
+    # Prevents the Pandas "Length of values" crash if the merge results in 0 rows
+    if b_df.empty:
+        for col in ['ML_Prob', 'Rank', 'Value Price', 'True_AI_Prob', 'Cal_Value_Price', 'Value_Edge_Perc', 'Shadow_Prob', 'Pure Rank', 'Rank2_Prob', 'Prob Gap', 'User Value']:
+            if col not in b_df.columns:
+                b_df[col] = 0.0
+        b_df['Edge Bracket'] = 'Unknown'
+        return b_df
+    # ---------------------------------------------------
     
     # --- THE PREDICTION VAULT BRIDGE ---
     if os.path.exists("BOTMan_Prediction_Vault.csv") and not is_live_today and use_vault:
@@ -1094,7 +1104,7 @@ else:
                         df_smart_master['Horse'] = df_smart_master['Horse'].astype(str).str.strip().str.title()
                         df_a['Horse'] = df_a['Horse'].astype(str).str.strip().str.title()
                         
-                        # Drop overlapping columns to prevent _x / _y Pandas KeyError crashes
+                        # Drop overlapping columns from history to prevent Pandas _x / _y errors
                         overlap = [c for c in df_a.columns if c in df_smart_master.columns and c not in ['Date_Key', 'Time', 'Course', 'Horse']]
                         df_a_clean = df_a.drop(columns=overlap)
                         
@@ -1103,7 +1113,8 @@ else:
                         merged_smart = merged_smart[merged_smart['Fin Pos'] > 0]
                         
                         if not merged_smart.empty:
-                            # --- 🧠 INJECT DOUBLE-BRAIN FOR THE CSV EXPORT ---
+                            # --- 🧠 INJECT THE DOUBLE-BRAIN ENGINE HERE ---
+                            # Attaches the Vault's Original AI and calculates the new Leashed AI dynamically
                             merged_smart = prep_system_builder_data(merged_smart, model, feats, shadow_model, shadow_feats, cal_model, is_live_today=False, use_vault=True)
                             
                             if sys_col_found is None:
@@ -1171,18 +1182,16 @@ else:
                                     sub_df = merged_smart[(merged_smart[sys_col_found] == row[sys_col_found]) & (merged_smart['Month_Yr'] == row['Period'])]
                                     
                                 # --- FULL CSV DOWNLOAD WITH REORDERED DOUBLE-BRAIN COLUMNS ---
-                                # 1. Define the columns we want pinned to the front
                                 base_cols = ['Date', 'Time', 'Course', 'Horse', '7:30AM Price']
                                 brain_cols = ['ML_Prob', 'Value Price', 'True_AI_Prob', 'Cal_Value_Price', 'Value_Edge_Perc']
                                 
-                                # Ensure we only try to reorder columns that actually exist
                                 safe_base = [c for c in base_cols if c in sub_df.columns]
                                 safe_brain = [c for c in brain_cols if c in sub_df.columns]
                                 
-                                # 2. Gather every single other column from your 75-column database
+                                # Gather every single other column from your database
                                 other_cols = [c for c in sub_df.columns if c not in safe_base and c not in safe_brain]
                                 
-                                # 3. Stitch them together so the brain columns are immediately after 7:30AM Price
+                                # Stitch them together so the brain columns are pinned right after 7:30AM Price
                                 final_export_cols = safe_base + safe_brain + other_cols
                                 
                                 csv_b64 = base64.b64encode(sub_df[final_export_cols].to_csv(index=False).encode('utf-8')).decode()
