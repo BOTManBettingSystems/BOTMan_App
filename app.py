@@ -227,7 +227,7 @@ def prep_system_builder_data(_df, _model, feats, _shadow_model=None, shadow_feat
         return b_df
     # ---------------------------------------------------
     
-    # --- THE PREDICTION VAULT BRIDGE ---
+# --- THE PREDICTION VAULT BRIDGE ---
     if os.path.exists("BOTMan_Prediction_Vault.csv") and not is_live_today and use_vault:
         vault_df = pd.read_csv("BOTMan_Prediction_Vault.csv")
         
@@ -247,23 +247,48 @@ def prep_system_builder_data(_df, _model, feats, _shadow_model=None, shadow_feat
         v_sub = vault_df[[c for c in v_cols if c in vault_df.columns]].rename(columns=rename_dict)
         
         b_df = pd.merge(b_df, v_sub, on=['Date', 'Time', 'Course', 'Horse'], how='left')
-                        
-        missing_mask = b_df['ML_Prob_vault'].isna()
+        
+        # 🛡️ BUG FIX: Ensure the mask doesn't fail if the vault is entirely empty
+        if 'ML_Prob_vault' in b_df.columns:
+            missing_mask = b_df['ML_Prob_vault'].isna()
+        else:
+            missing_mask = pd.Series(True, index=b_df.index)
         
         if missing_mask.any():
             new_horses = b_df[missing_mask].copy()
             new_probs = _model.predict_proba(new_horses[feats].fillna(0))[:, 1]
+            
+            # 🛡️ BUG FIX: Initialize columns before assignment to prevent Pandas length crash
+            if 'ML_Prob' not in b_df.columns: b_df['ML_Prob'] = np.nan
             b_df.loc[missing_mask, 'ML_Prob'] = new_probs
             
-            b_df['ML_Prob'] = b_df['ML_Prob_vault'].fillna(b_df.get('ML_Prob'))
-            b_df['Rank'] = b_df['Rank_vault'].fillna(b_df.groupby(['Date_Key', 'Time', 'Course'])['ML_Prob'].rank(ascending=False, method='min'))
-            b_df['Value Price'] = b_df['Value Price_vault'].fillna(1 / b_df['ML_Prob'])
+            if 'ML_Prob_vault' in b_df.columns:
+                b_df['ML_Prob'] = b_df['ML_Prob_vault'].fillna(b_df['ML_Prob'])
+                
+            if 'Rank_vault' in b_df.columns:
+                b_df['Rank'] = b_df['Rank_vault'].fillna(b_df.groupby(['Date_Key', 'Time', 'Course'])['ML_Prob'].rank(ascending=False, method='min'))
+            else:
+                b_df['Rank'] = b_df.groupby(['Date_Key', 'Time', 'Course'])['ML_Prob'].rank(ascending=False, method='min')
+                
+            if 'Value Price_vault' in b_df.columns:
+                b_df['Value Price'] = b_df['Value Price_vault'].fillna(1 / b_df['ML_Prob'])
+            else:
+                b_df['Value Price'] = 1 / b_df['ML_Prob']
             
             if _cal_model is not None:
                 new_cal_probs = _cal_model.predict_proba(new_horses[feats].fillna(0))[:, 1]
+                
+                # 🛡️ BUG FIX: Initialize columns before assignment
+                if 'True_AI_Prob' not in b_df.columns: b_df['True_AI_Prob'] = np.nan
                 b_df.loc[missing_mask, 'True_AI_Prob'] = new_cal_probs
-                b_df['True_AI_Prob'] = b_df.get('True_AI_Prob_vault', pd.Series(dtype=float)).fillna(b_df.get('True_AI_Prob'))
-                b_df['Cal_Value_Price'] = b_df.get('Cal_Value_Price_vault', pd.Series(dtype=float)).fillna(np.where(b_df['True_AI_Prob'] > 0.001, 1.0 / b_df['True_AI_Prob'], 1000.0))
+                
+                if 'True_AI_Prob_vault' in b_df.columns:
+                    b_df['True_AI_Prob'] = b_df['True_AI_Prob_vault'].fillna(b_df['True_AI_Prob'])
+                    
+                if 'Cal_Value_Price_vault' in b_df.columns:
+                    b_df['Cal_Value_Price'] = b_df['Cal_Value_Price_vault'].fillna(np.where(b_df['True_AI_Prob'] > 0.001, 1.0 / b_df['True_AI_Prob'], 1000.0))
+                else:
+                    b_df['Cal_Value_Price'] = np.where(b_df['True_AI_Prob'] > 0.001, 1.0 / b_df['True_AI_Prob'], 1000.0)
             
             append_cols = ['Date', 'Time', 'Course', 'Horse', 'ML_Prob', 'Rank', 'Value Price']
             if _cal_model is not None: append_cols += ['True_AI_Prob', 'Cal_Value_Price']
