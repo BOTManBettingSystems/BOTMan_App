@@ -1170,11 +1170,21 @@ else:
                                 else:
                                     sub_df = merged_smart[(merged_smart[sys_col_found] == row[sys_col_found]) & (merged_smart['Month_Yr'] == row['Period'])]
                                     
-                                # --- RICH CSV DOWNLOAD (Only the important columns) ---
-                                export_cols = ['Date', 'Time', 'Course', 'Horse', '7:30AM Price', 'BSP', 'Fin Pos', 'Win P/L <2%', 'Place P/L <2%', 'ML_Prob', 'Value Price', 'True_AI_Prob', 'Cal_Value_Price', 'Value_Edge_Perc', sys_col_found]
-                                avail_export_cols = [c for c in export_cols if c in sub_df.columns]
+                               # --- FULL CSV DOWNLOAD WITH REORDERED DOUBLE-BRAIN COLUMNS ---
+                                base_cols = ['Date', 'Time', 'Course', 'Horse', '7:30AM Price']
+                                brain_cols = ['ML_Prob', 'Value Price', 'True_AI_Prob', 'Cal_Value_Price', 'Value_Edge_Perc']
                                 
-                                csv_b64 = base64.b64encode(sub_df[avail_export_cols].to_csv(index=False).encode('utf-8')).decode()
+                                # Ensure we only try to reorder columns that actually exist
+                                safe_base = [c for c in base_cols if c in sub_df.columns]
+                                safe_brain = [c for c in brain_cols if c in sub_df.columns]
+                                
+                                # Get all other columns that aren't in base or brain lists
+                                other_cols = [c for c in sub_df.columns if c not in safe_base and c not in safe_brain]
+                                
+                                # Combine them for the final layout (Base + Brain + Everything Else)
+                                final_export_cols = safe_base + safe_brain + other_cols
+                                
+                                csv_b64 = base64.b64encode(sub_df[final_export_cols].to_csv(index=False).encode('utf-8')).decode()
                                 safe_name = str(row[sys_col_found]).replace(' ', '_').replace('/', '-')
                                 safe_per = str(row['Period']).replace(' ', '')
                                 dl_link = f'<a href="data:file/csv;base64,{csv_b64}" download="{safe_name}_{safe_per}.csv" style="text-decoration:none; font-size:16px;" title="Download selections">📥</a>'
