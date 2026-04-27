@@ -81,7 +81,6 @@ def load_all_data():
             s = str(x).split('.')[0].strip()
             if len(s) > 6: s = s[-6:]
             return s
-            
         df_all['Date_Key'] = df_all['Date'].apply(clean_date)
         df_all['Date_DT'] = pd.to_datetime(df_all['Date_Key'], format='%y%m%d', errors='coerce')
         
@@ -215,118 +214,52 @@ def prep_system_builder_data(_df, _model, feats, _shadow_model=None, shadow_feat
         b_df['Date_DT'] = pd.to_datetime(b_df['Date_Key'], format='%y%m%d', errors='coerce')
         
     if not is_live_today:
-        b_df = b_df[pd.to_numeric(b_df.get('Fin Pos', 0), errors='coerce').fillna(0) > 0].copy()
-
-    # --- 🛡️ CRITICAL FIX: THE EMPTY DATAFRAME SHIELD ---
-    # Prevents the Pandas "Length of values" crash if the merge results in 0 rows
-    if b_df.empty:
-        for col in ['ML_Prob', 'Rank', 'Value Price', 'True_AI_Prob', 'Cal_Value_Price', 'Value_Edge_Perc', 'Shadow_Prob', 'Pure Rank', 'Rank2_Prob', 'Prob Gap', 'User Value']:
-            if col not in b_df.columns:
-                b_df[col] = 0.0
-        b_df['Edge Bracket'] = 'Unknown'
-        return b_df
-    # ---------------------------------------------------
+        b_df = b_df[b_df.get('Fin Pos', 0) > 0].copy()
     
-# --- THE PREDICTION VAULT BRIDGE ---
-    # 🛡️ NEW: Auto-Unzip the Vault if the compressed version is uploaded
-    if os.path.exists("BOTMan_Prediction_Vault.zip") and not os.path.exists("BOTMan_Prediction_Vault.csv"):
-        try:
-            with zipfile.ZipFile("BOTMan_Prediction_Vault.zip", 'r') as zip_ref:
-                zip_ref.extractall(".")
-        except:
-            pass
-
+    # --- THE PREDICTION VAULT BRIDGE ---
     if os.path.exists("BOTMan_Prediction_Vault.csv") and not is_live_today and use_vault:
-        try:
-            vault_df = pd.read_csv("BOTMan_Prediction_Vault.csv")
-            # 🛡️ BUG FIX 1: If the vault is corrupted or missing headers, ignore it
-            if not all(c in vault_df.columns for c in ['Date', 'Time', 'Course', 'Horse']):
-                vault_df = pd.DataFrame()
-        except:
-            vault_df = pd.DataFrame()
-
-        if not vault_df.empty:
-            for c in ['Date', 'Time', 'Course', 'Horse']:
-                if c in vault_df.columns and c in b_df.columns:
-                    vault_df[c] = vault_df[c].astype(str).str.strip()
-                    b_df[c] = b_df[c].astype(str).str.strip()
-                    
-            has_leashed_vault = 'True_AI_Prob' in vault_df.columns
-            
-            rename_dict = {'ML_Prob': 'ML_Prob_vault', 'Rank': 'Rank_vault', 'Value Price': 'Value Price_vault'}
-            if has_leashed_vault:
-                rename_dict.update({'True_AI_Prob': 'True_AI_Prob_vault', 'Cal_Value_Price': 'Cal_Value_Price_vault'})
-                
-            v_cols = ['Date', 'Time', 'Course', 'Horse'] + list(rename_dict.keys())
-            
-            # 🛡️ BUG FIX 2: Ensure v_sub is a proper DataFrame and has the merge keys
-            available_v_cols = [c for c in v_cols if c in vault_df.columns]
-            if all(k in available_v_cols for k in ['Date', 'Time', 'Course', 'Horse']):
-                v_sub = vault_df[available_v_cols].rename(columns=rename_dict)
-                b_df = pd.merge(b_df, v_sub, on=['Date', 'Time', 'Course', 'Horse'], how='left')
-            else:
-                vault_df = pd.DataFrame() # Fallback to empty logic
+        vault_df = pd.read_csv("BOTMan_Prediction_Vault.csv")
         
-        # If vault was empty or failed validation, create dummy mask
-        if vault_df.empty or 'ML_Prob_vault' not in b_df.columns:
-            missing_mask = pd.Series(True, index=b_df.index)
-        else:
-            missing_mask = b_df['ML_Prob_vault'].isna()
-            
+        # Force strict string matching to prevent subtle join failures
+        for c in ['Date', 'Time', 'Course', 'Horse']:
+            if c in vault_df.columns and c in b_df.columns:
+                vault_df[c] = vault_df[c].astype(str).str.strip()
+                b_df[c] = b_df[c].astype(str).str.strip()
+                
+        # FIX: Explicitly rename columns before merge so we don't rely on Pandas suffix behavior
+        v_sub = vault_df[['Date', 'Time', 'Course', 'Horse', 'ML_Prob', 'Rank', 'Value Price']].rename(
+            columns={'ML_Prob': 'ML_Prob_vault', 'Rank': 'Rank_vault', 'Value Price': 'Value Price_vault'}
+        )
+        
+        # Merge the frozen AI opinions onto the historical facts
+        b_df = pd.merge(b_df, v_sub, on=['Date', 'Time', 'Course', 'Horse'], how='left')
+                        
+        # Identify which horses are brand new and missing from the Vault
+        missing_mask = b_df['ML_Prob_vault'].isna()
+        
         if missing_mask.any():
+            # Predict ONLY the new horses dynamically
             new_horses = b_df[missing_mask].copy()
             new_probs = _model.predict_proba(new_horses[feats].fillna(0))[:, 1]
-            
-            if 'ML_Prob' not in b_df.columns: b_df['ML_Prob'] = np.nan
             b_df.loc[missing_mask, 'ML_Prob'] = new_probs
             
-            if 'ML_Prob_vault' in b_df.columns:
-                b_df['ML_Prob'] = b_df['ML_Prob_vault'].fillna(b_df['ML_Prob'])
-                
-            if 'Rank_vault' in b_df.columns:
-                b_df['Rank'] = b_df['Rank_vault'].fillna(b_df.groupby(['Date_Key', 'Time', 'Course'])['ML_Prob'].rank(ascending=False, method='min'))
-            else:
-                b_df['Rank'] = b_df.groupby(['Date_Key', 'Time', 'Course'])['ML_Prob'].rank(ascending=False, method='min')
-                
-            if 'Value Price_vault' in b_df.columns:
-                b_df['Value Price'] = b_df['Value Price_vault'].fillna(1 / b_df['ML_Prob'])
-            else:
-                b_df['Value Price'] = 1 / b_df['ML_Prob']
+            # Combine the frozen vault data with the new live calculations
+            b_df['ML_Prob'] = b_df['ML_Prob_vault'].fillna(b_df.get('ML_Prob'))
+            b_df['Rank'] = b_df['Rank_vault'].fillna(b_df.groupby(['Date_Key', 'Time', 'Course'])['ML_Prob'].rank(ascending=False, method='min'))
+            b_df['Value Price'] = b_df['Value Price_vault'].fillna(1 / b_df['ML_Prob'])
             
-            if _cal_model is not None:
-                new_cal_probs = _cal_model.predict_proba(new_horses[feats].fillna(0))[:, 1]
-                
-                if 'True_AI_Prob' not in b_df.columns: b_df['True_AI_Prob'] = np.nan
-                b_df.loc[missing_mask, 'True_AI_Prob'] = new_cal_probs
-                
-                if 'True_AI_Prob_vault' in b_df.columns:
-                    b_df['True_AI_Prob'] = b_df['True_AI_Prob_vault'].fillna(b_df['True_AI_Prob'])
-                    
-                if 'Cal_Value_Price_vault' in b_df.columns:
-                    b_df['Cal_Value_Price'] = b_df['Cal_Value_Price_vault'].fillna(np.where(b_df['True_AI_Prob'] > 0.001, 1.0 / b_df['True_AI_Prob'], 1000.0))
-                else:
-                    b_df['Cal_Value_Price'] = np.where(b_df['True_AI_Prob'] > 0.001, 1.0 / b_df['True_AI_Prob'], 1000.0)
-            
-            append_cols = ['Date', 'Time', 'Course', 'Horse', 'ML_Prob', 'Rank', 'Value Price']
-            if _cal_model is not None: append_cols += ['True_AI_Prob', 'Cal_Value_Price']
-            
-            append_df = b_df[missing_mask][[c for c in append_cols if c in b_df.columns]]
-            
-            # 🛡️ BUG FIX 3: Write headers if file doesn't exist to prevent headerless corruption
-            write_header = not os.path.exists("BOTMan_Prediction_Vault.csv") or os.path.getsize("BOTMan_Prediction_Vault.csv") == 0
-            append_df.to_csv("BOTMan_Prediction_Vault.csv", mode='a', header=write_header, index=False)
+            # Auto-Append the new horses to the Vault CSV quietly in the background
+            append_df = b_df[missing_mask][['Date', 'Time', 'Course', 'Horse', 'ML_Prob', 'Rank', 'Value Price']]
+            append_df.to_csv("BOTMan_Prediction_Vault.csv", mode='a', header=False, index=False)
         else:
             b_df['ML_Prob'] = b_df['ML_Prob_vault']
             b_df['Rank'] = b_df['Rank_vault']
             b_df['Value Price'] = b_df['Value Price_vault']
-            if 'True_AI_Prob_vault' in b_df.columns:
-                b_df['True_AI_Prob'] = b_df['True_AI_Prob_vault']
-                b_df['Cal_Value_Price'] = b_df['Cal_Value_Price_vault']
             
-        drop_cols = [c for c in ['ML_Prob_vault', 'Rank_vault', 'Value Price_vault', 'True_AI_Prob_vault', 'Cal_Value_Price_vault'] if c in b_df.columns]
-        b_df = b_df.drop(columns=drop_cols)
+        b_df = b_df.drop(columns=['ML_Prob_vault', 'Rank_vault', 'Value Price_vault'])
         
     else:
+        # Fallback (or if it's today's live predictions)
         b_df['ML_Prob'] = _model.predict_proba(b_df[feats].fillna(0))[:, 1]
         b_df['Rank'] = b_df.groupby(['Date_Key', 'Time', 'Course'])['ML_Prob'].rank(ascending=False, method='min')
         b_df['Value Price'] = 1 / b_df['ML_Prob']
@@ -334,13 +267,17 @@ def prep_system_builder_data(_df, _model, feats, _shadow_model=None, shadow_feat
 
     # --- CALIBRATED BRAIN INTEGRATION (TRUE VALUE & EDGE) ---
     if _cal_model is not None:
-        if 'True_AI_Prob' not in b_df.columns:
-            b_df['True_AI_Prob'] = _cal_model.predict_proba(b_df[feats].fillna(0))[:, 1]
-            b_df['Cal_Value_Price'] = np.where(b_df['True_AI_Prob'] > 0.001, 1.0 / b_df['True_AI_Prob'], 1000.0)
+        b_df['True_AI_Prob'] = _cal_model.predict_proba(b_df[feats].fillna(0))[:, 1]
+        b_df['Cal_Value_Price'] = np.where(b_df['True_AI_Prob'] > 0.001, 1.0 / b_df['True_AI_Prob'], 1000.0)
         
-        safe_morning_price = pd.to_numeric(b_df.get('7:30AM Price', 0), errors='coerce').fillna(0)
-        b_df['Value_Edge_Perc'] = np.where(b_df['Cal_Value_Price'] > 0, ((safe_morning_price / b_df['Cal_Value_Price']) - 1) * 100, 0.0)
+        # Calculate Edge against the Leashed model
+        market_p = np.where(pd.to_numeric(b_df.get('BSP', 0), errors='coerce') > 0, 
+                            pd.to_numeric(b_df.get('BSP', 0), errors='coerce'), 
+                            pd.to_numeric(b_df.get('7:30AM Price', 0), errors='coerce'))
         
+        b_df['Value_Edge_Perc'] = ((market_p / b_df['Cal_Value_Price']) - 1) * 100
+        
+        # Edge Brackets for X-Ray
         v_bins = [-np.inf, 0.0, 10.0, 20.0, np.inf]
         v_labels = ['1. Negative Edge (<0%)', '2. Fair Value (0-10%)', '3. Value (10-20%)', '4. Deep Value (>20%)']
         b_df['Edge Bracket'] = pd.cut(b_df['Value_Edge_Perc'], bins=v_bins, labels=v_labels)
@@ -529,23 +466,20 @@ if st.session_state.get("is_admin") and st.session_state.get("show_admin_insight
                 # 2. Run them through the CURRENT AI brain
                 vault_df = prep_system_builder_data(history_df, model, feats, shadow_model, shadow_feats, cal_model)
                 
-                # 3. Strip it down to just the IDs and the Double-Brain AI Opinions
-                vault_cols = ['Date', 'Time', 'Course', 'Horse', 'ML_Prob', 'Rank', 'Value Price', 'True_AI_Prob', 'Cal_Value_Price']
+                # 3. Strip it down to just the IDs and the AI Opinions
+                vault_cols = ['Date', 'Time', 'Course', 'Horse', 'ML_Prob', 'Rank', 'Value Price']
                 available_cols = [c for c in vault_cols if c in vault_df.columns]
                 final_vault = vault_df[available_cols]
                 
-                # 4. Generate a compressed ZIP file to bypass Hugging Face upload limits
-                import io
-                zip_buffer = io.BytesIO()
-                with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED, False) as zip_file:
-                    zip_file.writestr("BOTMan_Prediction_Vault.csv", final_vault.to_csv(index=False).encode('utf-8'))
+                # 4. Generate the CSV file
+                csv_vault = final_vault.to_csv(index=False).encode('utf-8')
                 
                 st.success(f"Vault generated successfully! ({len(final_vault)} records frozen)")
                 st.download_button(
-                    label="📥 Download Compressed Vault (ZIP)",
-                    data=zip_buffer.getvalue(),
-                    file_name="BOTMan_Prediction_Vault.zip",
-                    mime="application/zip",
+                    label="📥 Download BOTMan_Prediction_Vault.csv",
+                    data=csv_vault,
+                    file_name="BOTMan_Prediction_Vault.csv",
+                    mime="text/csv",
                     use_container_width=True
                 )
             except Exception as e:
@@ -1154,40 +1088,29 @@ else:
                         df_smart_master['Date_Key'] = df_smart_master['Date'].apply(clean_d)
                         
                         # --- BULLETPROOF MERGE PREP ---
+                        # 1. Strip the silent ".0" floats that Pandas adds to the ODS file
                         df_smart_master['Time'] = df_smart_master['Time'].astype(str).str.split('.').str[0].str.strip()
                         df_a = df_all.copy()
                         df_a['Time'] = df_a['Time'].astype(str).str.split('.').str[0].str.strip()
                         
+                        # 2. Force strict Title Case to ignore upstream capitalization glitches
                         df_smart_master['Course'] = df_smart_master['Course'].astype(str).str.strip().str.title()
                         df_a['Course'] = df_a['Course'].astype(str).str.strip().str.title()
                         
                         df_smart_master['Horse'] = df_smart_master['Horse'].astype(str).str.strip().str.title()
                         df_a['Horse'] = df_a['Horse'].astype(str).str.strip().str.title()
                         
-                        # Drop overlapping columns to prevent _x / _y Pandas KeyError crashes
-                        overlap = [c for c in df_a.columns if c in df_smart_master.columns and c not in ['Date_Key', 'Time', 'Course', 'Horse']]
-                        df_a_clean = df_a.drop(columns=overlap)
-                        
-                        merged_smart = pd.merge(df_smart_master, df_a_clean, on=['Date_Key', 'Time', 'Course', 'Horse'], how='inner')
+                        merged_smart = pd.merge(df_smart_master, df_a, on=['Date_Key', 'Time', 'Course', 'Horse'], how='inner')
                         merged_smart['Fin Pos'] = pd.to_numeric(merged_smart['Fin Pos'], errors='coerce')
                         merged_smart = merged_smart[merged_smart['Fin Pos'] > 0]
                         
                         if not merged_smart.empty:
-                            # --- 🧠 INJECT DOUBLE-BRAIN FOR THE CSV EXPORT ---
-                            merged_smart = prep_system_builder_data(merged_smart, model, feats, shadow_model, shadow_feats, cal_model, is_live_today=False, use_vault=True)
-                            
-                            # --- 🛡️ THE BULLETPROOF GROUPBY SHIELD ---
-                            actual_sys_col = 'System Name'
-                            if sys_col_found and sys_col_found in merged_smart.columns:
-                                merged_smart[actual_sys_col] = merged_smart[sys_col_found]
-                            elif sys_col_found and sys_col_found.strip() in merged_smart.columns:
-                                merged_smart[actual_sys_col] = merged_smart[sys_col_found.strip()]
-                            elif actual_sys_col not in merged_smart.columns:
-                                merged_smart[actual_sys_col] = 'All Systems Combined'
-                                
-                            # Force column to strictly be strings and eliminate any NaNs prior to groupby
-                            merged_smart[actual_sys_col] = merged_smart[actual_sys_col].fillna('Unknown System').astype(str)
-                            # ------------------------------------------
+                            if sys_col_found is None:
+                                merged_smart['System Name'] = 'All Systems Combined'
+                                sys_col_found = 'System Name'
+                            else:
+                                merged_smart['System Name'] = merged_smart[sys_col_found]
+                                sys_col_found = 'System Name'
 
                             merged_smart['Win P/L <2%'] = pd.to_numeric(merged_smart['Win P/L <2%'], errors='coerce').fillna(0)
                             merged_smart['Place P/L <2%'] = pd.to_numeric(merged_smart['Place P/L <2%'], errors='coerce').fillna(0)
@@ -1198,25 +1121,21 @@ else:
                             merged_smart['Month_Yr'] = merged_smart['Date_DT'].dt.strftime('%Y - %b')
                             current_month_str = datetime.now().strftime('%Y - %b')
                             
-                            all_time = merged_smart.groupby(actual_sys_col, observed=False).agg(
+                            all_time = merged_smart.groupby(sys_col_found, observed=False).agg(
                                 Bets=('Horse', 'count'), Wins=('Is_Win', 'sum'), Win_Profit=('Win P/L <2%', 'sum'), Places=('Is_Place', 'sum'), Place_Profit=('Place P/L <2%', 'sum')
                             ).reset_index()
                             all_time['Period'] = 'All Time'
                             
                             curr_month_df = merged_smart[merged_smart['Month_Yr'] == current_month_str]
                             if not curr_month_df.empty:
-                                curr_month = curr_month_df.groupby(actual_sys_col, observed=False).agg(
+                                curr_month = curr_month_df.groupby(sys_col_found, observed=False).agg(
                                     Bets=('Horse', 'count'), Wins=('Is_Win', 'sum'), Win_Profit=('Win P/L <2%', 'sum'), Places=('Is_Place', 'sum'), Place_Profit=('Place P/L <2%', 'sum')
                                 ).reset_index()
                                 curr_month['Period'] = current_month_str
                             else:
-                                curr_month = pd.DataFrame({actual_sys_col: all_time[actual_sys_col].unique()})
+                                curr_month = all_time.copy()
                                 curr_month['Period'] = current_month_str
-                                curr_month['Bets'] = 0
-                                curr_month['Wins'] = 0
-                                curr_month['Win_Profit'] = 0.0
-                                curr_month['Places'] = 0
-                                curr_month['Place_Profit'] = 0.0
+                                curr_month[['Bets', 'Wins', 'Win_Profit', 'Places', 'Place_Profit']] = 0
 
                             combined = pd.concat([all_time, curr_month], ignore_index=True)
                             combined['Strike Rate (%)'] = np.where(combined['Bets'] > 0, (combined['Wins'] / combined['Bets'] * 100), 0)
@@ -1225,7 +1144,7 @@ else:
                             combined['Total P/L'] = combined['Win_Profit'] + combined['Place_Profit']
                             
                             combined['SortKey'] = np.where(combined['Period'] == 'All Time', 1, 2)
-                            combined = combined.sort_values(by=[actual_sys_col, 'SortKey']).drop('SortKey', axis=1)
+                            combined = combined.sort_values(by=[sys_col_found, 'SortKey']).drop('SortKey', axis=1)
 
                             html_table = """<style>.builder-table { border-collapse: collapse; width: 100%; min-width: 1000px; font-size: 14px; font-family: sans-serif; margin-top: 15px; } .builder-table th, .builder-table td { border: 1px solid #ccc; padding: 6px; text-align: center; white-space: nowrap; } .builder-table tr:hover { background-color: #0000FF !important; color: white !important; } .left-align { text-align: left !important; padding-left: 8px !important; }</style><div class="scrollable-table"><table class="builder-table"><thead><tr style="background-color: #1a3a5f; color: white;"><th class="left-align">System Name</th><th class="left-align">Period</th><th>Bets</th><th>Wins</th><th>Win P/L</th><th>Win SR</th><th>Places</th><th>Plc P/L</th><th>Plc SR</th><th>Total P/L</th><th>DL</th></tr></thead><tbody>"""
                             
@@ -1245,25 +1164,13 @@ else:
                                 p_color = "#2e7d32" if row['Place_Profit'] > 0 else "#d32f2f" if row['Place_Profit'] < 0 else "black"
                                 t_color = "#2e7d32" if row['Total P/L'] > 0 else "#d32f2f" if row['Total P/L'] < 0 else "black"
                                 
+                                # --- NEW: Generate row-specific CSV base64 link ---
                                 if row['Period'] == 'All Time':
                                     sub_df = merged_smart[merged_smart[sys_col_found] == row[sys_col_found]]
                                 else:
                                     sub_df = merged_smart[(merged_smart[sys_col_found] == row[sys_col_found]) & (merged_smart['Month_Yr'] == row['Period'])]
                                     
-                                # --- FULL CSV DOWNLOAD WITH REORDERED DOUBLE-BRAIN COLUMNS ---
-                                base_cols = ['Date', 'Time', 'Course', 'Horse', '7:30AM Price']
-                                brain_cols = ['ML_Prob', 'Value Price', 'True_AI_Prob', 'Cal_Value_Price', 'Value_Edge_Perc']
-                                
-                                safe_base = [c for c in base_cols if c in sub_df.columns]
-                                safe_brain = [c for c in brain_cols if c in sub_df.columns]
-                                
-                                # Gather every single other column from your database
-                                other_cols = [c for c in sub_df.columns if c not in safe_base and c not in safe_brain]
-                                
-                                # Stitch them together so the brain columns are pinned right after 7:30AM Price
-                                final_export_cols = safe_base + safe_brain + other_cols
-                                
-                                csv_b64 = base64.b64encode(sub_df[final_export_cols].to_csv(index=False).encode('utf-8')).decode()
+                                csv_b64 = base64.b64encode(sub_df.to_csv(index=False).encode('utf-8')).decode()
                                 safe_name = str(row[sys_col_found]).replace(' ', '_').replace('/', '-')
                                 safe_per = str(row['Period']).replace(' ', '')
                                 dl_link = f'<a href="data:file/csv;base64,{csv_b64}" download="{safe_name}_{safe_per}.csv" style="text-decoration:none; font-size:16px;" title="Download selections">📥</a>'
