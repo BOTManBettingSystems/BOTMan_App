@@ -1172,7 +1172,12 @@ else:
                             else:
                                 curr_month = all_time.copy()
                                 curr_month['Period'] = current_month_str
-                                curr_month[['Bets', 'Wins', 'Win_Profit', 'Places', 'Place_Profit']] = 0
+                                # THE FIX: Explicitly assign zero to each column to bypass the Pandas version quirk
+                                curr_month['Bets'] = 0
+                                curr_month['Wins'] = 0
+                                curr_month['Win_Profit'] = 0.0
+                                curr_month['Places'] = 0
+                                curr_month['Place_Profit'] = 0.0
 
                             combined = pd.concat([all_time, curr_month], ignore_index=True)
                             combined['Strike Rate (%)'] = np.where(combined['Bets'] > 0, (combined['Wins'] / combined['Bets'] * 100), 0)
