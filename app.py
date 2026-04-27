@@ -1084,21 +1084,17 @@ else:
                         df_smart_master['Date_Key'] = df_smart_master['Date'].apply(clean_d)
                         
                         # --- BULLETPROOF MERGE PREP ---
-                        # 1. Strip the silent ".0" floats that Pandas adds to the ODS file
                         df_smart_master['Time'] = df_smart_master['Time'].astype(str).str.split('.').str[0].str.strip()
                         df_a = df_all.copy()
                         df_a['Time'] = df_a['Time'].astype(str).str.split('.').str[0].str.strip()
                         
-                        # 2. Force strict Title Case to ignore upstream capitalization glitches
                         df_smart_master['Course'] = df_smart_master['Course'].astype(str).str.strip().str.title()
                         df_a['Course'] = df_a['Course'].astype(str).str.strip().str.title()
                         
                         df_smart_master['Horse'] = df_smart_master['Horse'].astype(str).str.strip().str.title()
                         df_a['Horse'] = df_a['Horse'].astype(str).str.strip().str.title()
                         
-                        # --- THE KEYERROR FIX ---
-                        # If df_a has overlapping columns, pd.merge renames them to _x and _y, crashing the app.
-                        # We strip out any overlap from df_a before the merge to protect the Master file.
+                        # Drop overlapping columns to prevent _x / _y Pandas KeyError crashes
                         overlap = [c for c in df_a.columns if c in df_smart_master.columns and c not in ['Date_Key', 'Time', 'Course', 'Horse']]
                         df_a_clean = df_a.drop(columns=overlap)
                         
@@ -1107,8 +1103,7 @@ else:
                         merged_smart = merged_smart[merged_smart['Fin Pos'] > 0]
                         
                         if not merged_smart.empty:
-                            # --- 🧠 INJECT THE DOUBLE-BRAIN ENGINE HERE ---
-                            # Attaches the Vault's Original AI and calculates the Leashed AI dynamically for the CSV export
+                            # --- 🧠 INJECT DOUBLE-BRAIN FOR THE CSV EXPORT ---
                             merged_smart = prep_system_builder_data(merged_smart, model, feats, shadow_model, shadow_feats, cal_model, is_live_today=False, use_vault=True)
                             
                             if sys_col_found is None:
@@ -1170,13 +1165,16 @@ else:
                                 p_color = "#2e7d32" if row['Place_Profit'] > 0 else "#d32f2f" if row['Place_Profit'] < 0 else "black"
                                 t_color = "#2e7d32" if row['Total P/L'] > 0 else "#d32f2f" if row['Total P/L'] < 0 else "black"
                                 
-                                # --- NEW: Generate row-specific CSV base64 link ---
                                 if row['Period'] == 'All Time':
                                     sub_df = merged_smart[merged_smart[sys_col_found] == row[sys_col_found]]
                                 else:
                                     sub_df = merged_smart[(merged_smart[sys_col_found] == row[sys_col_found]) & (merged_smart['Month_Yr'] == row['Period'])]
                                     
-                                csv_b64 = base64.b64encode(sub_df.to_csv(index=False).encode('utf-8')).decode()
+                                # --- RICH CSV DOWNLOAD (Only the important columns) ---
+                                export_cols = ['Date', 'Time', 'Course', 'Horse', '7:30AM Price', 'BSP', 'Fin Pos', 'Win P/L <2%', 'Place P/L <2%', 'ML_Prob', 'Value Price', 'True_AI_Prob', 'Cal_Value_Price', 'Value_Edge_Perc', sys_col_found]
+                                avail_export_cols = [c for c in export_cols if c in sub_df.columns]
+                                
+                                csv_b64 = base64.b64encode(sub_df[avail_export_cols].to_csv(index=False).encode('utf-8')).decode()
                                 safe_name = str(row[sys_col_found]).replace(' ', '_').replace('/', '-')
                                 safe_per = str(row['Period']).replace(' ', '')
                                 dl_link = f'<a href="data:file/csv;base64,{csv_b64}" download="{safe_name}_{safe_per}.csv" style="text-decoration:none; font-size:16px;" title="Download selections">📥</a>'
