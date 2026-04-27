@@ -1124,16 +1124,21 @@ else:
                         merged_smart = merged_smart[merged_smart['Fin Pos'] > 0]
                         
                         if not merged_smart.empty:
-                            # --- 🧠 INJECT THE DOUBLE-BRAIN ENGINE HERE ---
-                            # Attaches the Vault's Original AI and calculates the new Leashed AI dynamically
+                            # --- 🧠 INJECT DOUBLE-BRAIN FOR THE CSV EXPORT ---
                             merged_smart = prep_system_builder_data(merged_smart, model, feats, shadow_model, shadow_feats, cal_model, is_live_today=False, use_vault=True)
                             
-                            if sys_col_found is None:
-                                merged_smart['System Name'] = 'All Systems Combined'
-                                sys_col_found = 'System Name'
-                            else:
-                                merged_smart['System Name'] = merged_smart[sys_col_found]
-                                sys_col_found = 'System Name'
+                            # --- 🛡️ THE BULLETPROOF GROUPBY SHIELD ---
+                            actual_sys_col = 'System Name'
+                            if sys_col_found and sys_col_found in merged_smart.columns:
+                                merged_smart[actual_sys_col] = merged_smart[sys_col_found]
+                            elif sys_col_found and sys_col_found.strip() in merged_smart.columns:
+                                merged_smart[actual_sys_col] = merged_smart[sys_col_found.strip()]
+                            elif actual_sys_col not in merged_smart.columns:
+                                merged_smart[actual_sys_col] = 'All Systems Combined'
+                                
+                            # Force column to strictly be strings and eliminate any NaNs prior to groupby
+                            merged_smart[actual_sys_col] = merged_smart[actual_sys_col].fillna('Unknown System').astype(str)
+                            # ------------------------------------------
 
                             merged_smart['Win P/L <2%'] = pd.to_numeric(merged_smart['Win P/L <2%'], errors='coerce').fillna(0)
                             merged_smart['Place P/L <2%'] = pd.to_numeric(merged_smart['Place P/L <2%'], errors='coerce').fillna(0)
@@ -1144,21 +1149,20 @@ else:
                             merged_smart['Month_Yr'] = merged_smart['Date_DT'].dt.strftime('%Y - %b')
                             current_month_str = datetime.now().strftime('%Y - %b')
                             
-                            all_time = merged_smart.groupby(sys_col_found, observed=False).agg(
+                            all_time = merged_smart.groupby(actual_sys_col, observed=False).agg(
                                 Bets=('Horse', 'count'), Wins=('Is_Win', 'sum'), Win_Profit=('Win P/L <2%', 'sum'), Places=('Is_Place', 'sum'), Place_Profit=('Place P/L <2%', 'sum')
                             ).reset_index()
                             all_time['Period'] = 'All Time'
                             
                             curr_month_df = merged_smart[merged_smart['Month_Yr'] == current_month_str]
                             if not curr_month_df.empty:
-                                curr_month = curr_month_df.groupby(sys_col_found, observed=False).agg(
+                                curr_month = curr_month_df.groupby(actual_sys_col, observed=False).agg(
                                     Bets=('Horse', 'count'), Wins=('Is_Win', 'sum'), Win_Profit=('Win P/L <2%', 'sum'), Places=('Is_Place', 'sum'), Place_Profit=('Place P/L <2%', 'sum')
                                 ).reset_index()
                                 curr_month['Period'] = current_month_str
                             else:
-                                curr_month = all_time.copy()
+                                curr_month = pd.DataFrame({actual_sys_col: all_time[actual_sys_col].unique()})
                                 curr_month['Period'] = current_month_str
-                                # THE FIX: Explicitly assign zero to each column to bypass the Pandas version quirk
                                 curr_month['Bets'] = 0
                                 curr_month['Wins'] = 0
                                 curr_month['Win_Profit'] = 0.0
@@ -1172,7 +1176,7 @@ else:
                             combined['Total P/L'] = combined['Win_Profit'] + combined['Place_Profit']
                             
                             combined['SortKey'] = np.where(combined['Period'] == 'All Time', 1, 2)
-                            combined = combined.sort_values(by=[sys_col_found, 'SortKey']).drop('SortKey', axis=1)
+                            combined = combined.sort_values(by=[actual_sys_col, 'SortKey']).drop('SortKey', axis=1)
 
                             html_table = """<style>.builder-table { border-collapse: collapse; width: 100%; min-width: 1000px; font-size: 14px; font-family: sans-serif; margin-top: 15px; } .builder-table th, .builder-table td { border: 1px solid #ccc; padding: 6px; text-align: center; white-space: nowrap; } .builder-table tr:hover { background-color: #0000FF !important; color: white !important; } .left-align { text-align: left !important; padding-left: 8px !important; }</style><div class="scrollable-table"><table class="builder-table"><thead><tr style="background-color: #1a3a5f; color: white;"><th class="left-align">System Name</th><th class="left-align">Period</th><th>Bets</th><th>Wins</th><th>Win P/L</th><th>Win SR</th><th>Places</th><th>Plc P/L</th><th>Plc SR</th><th>Total P/L</th><th>DL</th></tr></thead><tbody>"""
                             
