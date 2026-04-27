@@ -1105,11 +1105,12 @@ else:
                         merged_smart = merged_smart[merged_smart['Fin Pos'] > 0]
                         
                         if not merged_smart.empty:
+                            # --- 🧠 INJECT THE DOUBLE-BRAIN ENGINE HERE ---
+                            # This attaches the Vault's Original AI and calculates the new Leashed AI dynamically
+                            merged_smart = prep_system_builder_data(merged_smart, model, feats, shadow_model, shadow_feats, cal_model, is_live_today=False, use_vault=True)
+                            
                             if sys_col_found is None:
                                 merged_smart['System Name'] = 'All Systems Combined'
-                                sys_col_found = 'System Name'
-                            else:
-                                merged_smart['System Name'] = merged_smart[sys_col_found]
                                 sys_col_found = 'System Name'
 
                             merged_smart['Win P/L <2%'] = pd.to_numeric(merged_smart['Win P/L <2%'], errors='coerce').fillna(0)
