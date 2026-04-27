@@ -226,58 +226,82 @@ def prep_system_builder_data(_df, _model, feats, _shadow_model=None, shadow_feat
         return b_df
     # ---------------------------------------------------
     
-    # --- THE PREDICTION VAULT BRIDGE ---
+# --- THE PREDICTION VAULT BRIDGE ---
     if os.path.exists("BOTMan_Prediction_Vault.csv") and not is_live_today and use_vault:
         vault_df = pd.read_csv("BOTMan_Prediction_Vault.csv")
         
-        # Force strict string matching to prevent subtle join failures
         for c in ['Date', 'Time', 'Course', 'Horse']:
             if c in vault_df.columns and c in b_df.columns:
                 vault_df[c] = vault_df[c].astype(str).str.strip()
                 b_df[c] = b_df[c].astype(str).str.strip()
                 
-        # FIX: Explicitly rename columns before merge so we don't rely on Pandas suffix behavior
-        v_sub = vault_df[['Date', 'Time', 'Course', 'Horse', 'ML_Prob', 'Rank', 'Value Price']].rename(
-            columns={'ML_Prob': 'ML_Prob_vault', 'Rank': 'Rank_vault', 'Value Price': 'Value Price_vault'}
-        )
+        # Check if this is the Old Vault (1 Brain) or New Vault (2 Brains)
+        has_leashed_vault = 'True_AI_Prob' in vault_df.columns
         
-        # Merge the frozen AI opinions onto the historical facts
+        rename_dict = {'ML_Prob': 'ML_Prob_vault', 'Rank': 'Rank_vault', 'Value Price': 'Value Price_vault'}
+        if has_leashed_vault:
+            rename_dict.update({'True_AI_Prob': 'True_AI_Prob_vault', 'Cal_Value_Price': 'Cal_Value_Price_vault'})
+            
+        v_cols = ['Date', 'Time', 'Course', 'Horse'] + list(rename_dict.keys())
+        v_sub = vault_df[[c for c in v_cols if c in vault_df.columns]].rename(columns=rename_dict)
+        
         b_df = pd.merge(b_df, v_sub, on=['Date', 'Time', 'Course', 'Horse'], how='left')
                         
-        # Identify which horses are brand new and missing from the Vault
         missing_mask = b_df['ML_Prob_vault'].isna()
         
         if missing_mask.any():
-            # Predict ONLY the new horses dynamically
             new_horses = b_df[missing_mask].copy()
             new_probs = _model.predict_proba(new_horses[feats].fillna(0))[:, 1]
             b_df.loc[missing_mask, 'ML_Prob'] = new_probs
             
-            # Combine the frozen vault data with the new live calculations
             b_df['ML_Prob'] = b_df['ML_Prob_vault'].fillna(b_df.get('ML_Prob'))
             b_df['Rank'] = b_df['Rank_vault'].fillna(b_df.groupby(['Date_Key', 'Time', 'Course'])['ML_Prob'].rank(ascending=False, method='min'))
             b_df['Value Price'] = b_df['Value Price_vault'].fillna(1 / b_df['ML_Prob'])
             
-            # Auto-Append the new horses to the Vault CSV quietly in the background
-            append_df = b_df[missing_mask][['Date', 'Time', 'Course', 'Horse', 'ML_Prob', 'Rank', 'Value Price']]
+            if _cal_model is not None:
+                new_cal_probs = _cal_model.predict_proba(new_horses[feats].fillna(0))[:, 1]
+                b_df.loc[missing_mask, 'True_AI_Prob'] = new_cal_probs
+                b_df['True_AI_Prob'] = b_df.get('True_AI_Prob_vault', pd.Series(dtype=float)).fillna(b_df.get('True_AI_Prob'))
+                b_df['Cal_Value_Price'] = b_df.get('Cal_Value_Price_vault', pd.Series(dtype=float)).fillna(np.where(b_df['True_AI_Prob'] > 0.001, 1.0 / b_df['True_AI_Prob'], 1000.0))
+            
+            append_cols = ['Date', 'Time', 'Course', 'Horse', 'ML_Prob', 'Rank', 'Value Price']
+            if _cal_model is not None: append_cols += ['True_AI_Prob', 'Cal_Value_Price']
+            
+            append_df = b_df[missing_mask][[c for c in append_cols if c in b_df.columns]]
             append_df.to_csv("BOTMan_Prediction_Vault.csv", mode='a', header=False, index=False)
         else:
             b_df['ML_Prob'] = b_df['ML_Prob_vault']
             b_df['Rank'] = b_df['Rank_vault']
             b_df['Value Price'] = b_df['Value Price_vault']
+            if has_leashed_vault:
+                b_df['True_AI_Prob'] = b_df['True_AI_Prob_vault']
+                b_df['Cal_Value_Price'] = b_df['Cal_Value_Price_vault']
             
-        b_df = b_df.drop(columns=['ML_Prob_vault', 'Rank_vault', 'Value Price_vault'])
+        b_df = b_df.drop(columns=[c for c in rename_dict.values() if c in b_df.columns])
         
     else:
-        # Fallback (or if it's today's live predictions)
         b_df['ML_Prob'] = _model.predict_proba(b_df[feats].fillna(0))[:, 1]
         b_df['Rank'] = b_df.groupby(['Date_Key', 'Time', 'Course'])['ML_Prob'].rank(ascending=False, method='min')
         b_df['Value Price'] = 1 / b_df['ML_Prob']
     # --- END OF VAULT BRIDGE ---
+
     # --- CALIBRATED BRAIN INTEGRATION (TRUE VALUE & EDGE) ---
     if _cal_model is not None:
-        b_df['True_AI_Prob'] = _cal_model.predict_proba(b_df[feats].fillna(0))[:, 1]
-        b_df['Cal_Value_Price'] = np.where(b_df['True_AI_Prob'] > 0.001, 1.0 / b_df['True_AI_Prob'], 1000.0)
+        if 'True_AI_Prob' not in b_df.columns:
+            b_df['True_AI_Prob'] = _cal_model.predict_proba(b_df[feats].fillna(0))[:, 1]
+            b_df['Cal_Value_Price'] = np.where(b_df['True_AI_Prob'] > 0.001, 1.0 / b_df['True_AI_Prob'], 1000.0)
+        
+        safe_morning_price = pd.to_numeric(b_df.get('7:30AM Price', 0), errors='coerce').fillna(0)
+        b_df['Value_Edge_Perc'] = np.where(b_df['Cal_Value_Price'] > 0, ((safe_morning_price / b_df['Cal_Value_Price']) - 1) * 100, 0.0)
+        
+        v_bins = [-np.inf, 0.0, 10.0, 20.0, np.inf]
+        v_labels = ['1. Negative Edge (<0%)', '2. Fair Value (0-10%)', '3. Value (10-20%)', '4. Deep Value (>20%)']
+        b_df['Edge Bracket'] = pd.cut(b_df['Value_Edge_Perc'], bins=v_bins, labels=v_labels)
+        b_df['Edge Bracket'] = b_df['Edge Bracket'].cat.add_categories('Unknown').fillna('Unknown')
+    else:
+        b_df['Value_Edge_Perc'] = 0.0
+        b_df['Edge Bracket'] = 'Unknown'
+        b_df['Cal_Value_Price'] = b_df.get('Value Price', 0.0)
         
         # --- NEW: Edge is strictly locked to the 7:30AM Morning Price ---
         safe_morning_price = pd.to_numeric(b_df.get('7:30AM Price', 0), errors='coerce').fillna(0)
@@ -472,8 +496,8 @@ if st.session_state.get("is_admin") and st.session_state.get("show_admin_insight
                 # 2. Run them through the CURRENT AI brain
                 vault_df = prep_system_builder_data(history_df, model, feats, shadow_model, shadow_feats, cal_model)
                 
-                # 3. Strip it down to just the IDs and the AI Opinions
-                vault_cols = ['Date', 'Time', 'Course', 'Horse', 'ML_Prob', 'Rank', 'Value Price']
+                # 3. Strip it down to just the IDs and the Double-Brain AI Opinions
+                vault_cols = ['Date', 'Time', 'Course', 'Horse', 'ML_Prob', 'Rank', 'Value Price', 'True_AI_Prob', 'Cal_Value_Price']
                 available_cols = [c for c in vault_cols if c in vault_df.columns]
                 final_vault = vault_df[available_cols]
                 
