@@ -227,7 +227,7 @@ def prep_system_builder_data(_df, _model, feats, _shadow_model=None, shadow_feat
         return b_df
     # ---------------------------------------------------
     
-# --- THE PREDICTION VAULT BRIDGE ---
+    # --- THE PREDICTION VAULT BRIDGE ---
     if os.path.exists("BOTMan_Prediction_Vault.csv") and not is_live_today and use_vault:
         vault_df = pd.read_csv("BOTMan_Prediction_Vault.csv")
         
@@ -295,20 +295,6 @@ def prep_system_builder_data(_df, _model, feats, _shadow_model=None, shadow_feat
         safe_morning_price = pd.to_numeric(b_df.get('7:30AM Price', 0), errors='coerce').fillna(0)
         b_df['Value_Edge_Perc'] = np.where(b_df['Cal_Value_Price'] > 0, ((safe_morning_price / b_df['Cal_Value_Price']) - 1) * 100, 0.0)
         
-        v_bins = [-np.inf, 0.0, 10.0, 20.0, np.inf]
-        v_labels = ['1. Negative Edge (<0%)', '2. Fair Value (0-10%)', '3. Value (10-20%)', '4. Deep Value (>20%)']
-        b_df['Edge Bracket'] = pd.cut(b_df['Value_Edge_Perc'], bins=v_bins, labels=v_labels)
-        b_df['Edge Bracket'] = b_df['Edge Bracket'].cat.add_categories('Unknown').fillna('Unknown')
-    else:
-        b_df['Value_Edge_Perc'] = 0.0
-        b_df['Edge Bracket'] = 'Unknown'
-        b_df['Cal_Value_Price'] = b_df.get('Value Price', 0.0)
-        
-        # --- NEW: Edge is strictly locked to the 7:30AM Morning Price ---
-        safe_morning_price = pd.to_numeric(b_df.get('7:30AM Price', 0), errors='coerce').fillna(0)
-        b_df['Value_Edge_Perc'] = np.where(b_df['Cal_Value_Price'] > 0, ((safe_morning_price / b_df['Cal_Value_Price']) - 1) * 100, 0.0)
-        
-        # Edge Brackets for X-Ray
         v_bins = [-np.inf, 0.0, 10.0, 20.0, np.inf]
         v_labels = ['1. Negative Edge (<0%)', '2. Fair Value (0-10%)', '3. Value (10-20%)', '4. Deep Value (>20%)']
         b_df['Edge Bracket'] = pd.cut(b_df['Value_Edge_Perc'], bins=v_bins, labels=v_labels)
@@ -1129,7 +1115,7 @@ else:
                         df_smart_master['Horse'] = df_smart_master['Horse'].astype(str).str.strip().str.title()
                         df_a['Horse'] = df_a['Horse'].astype(str).str.strip().str.title()
                         
-                        # Drop overlapping columns from history to prevent Pandas _x / _y errors
+                        # Drop overlapping columns to prevent _x / _y Pandas KeyError crashes
                         overlap = [c for c in df_a.columns if c in df_smart_master.columns and c not in ['Date_Key', 'Time', 'Course', 'Horse']]
                         df_a_clean = df_a.drop(columns=overlap)
                         
