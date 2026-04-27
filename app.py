@@ -228,6 +228,14 @@ def prep_system_builder_data(_df, _model, feats, _shadow_model=None, shadow_feat
     # ---------------------------------------------------
     
 # --- THE PREDICTION VAULT BRIDGE ---
+    # 🛡️ NEW: Auto-Unzip the Vault if the compressed version is uploaded
+    if os.path.exists("BOTMan_Prediction_Vault.zip") and not os.path.exists("BOTMan_Prediction_Vault.csv"):
+        try:
+            with zipfile.ZipFile("BOTMan_Prediction_Vault.zip", 'r') as zip_ref:
+                zip_ref.extractall(".")
+        except:
+            pass
+
     if os.path.exists("BOTMan_Prediction_Vault.csv") and not is_live_today and use_vault:
         try:
             vault_df = pd.read_csv("BOTMan_Prediction_Vault.csv")
@@ -526,15 +534,18 @@ if st.session_state.get("is_admin") and st.session_state.get("show_admin_insight
                 available_cols = [c for c in vault_cols if c in vault_df.columns]
                 final_vault = vault_df[available_cols]
                 
-                # 4. Generate the CSV file
-                csv_vault = final_vault.to_csv(index=False).encode('utf-8')
+                # 4. Generate a compressed ZIP file to bypass Hugging Face upload limits
+                import io
+                zip_buffer = io.BytesIO()
+                with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED, False) as zip_file:
+                    zip_file.writestr("BOTMan_Prediction_Vault.csv", final_vault.to_csv(index=False).encode('utf-8'))
                 
                 st.success(f"Vault generated successfully! ({len(final_vault)} records frozen)")
                 st.download_button(
-                    label="📥 Download BOTMan_Prediction_Vault.csv",
-                    data=csv_vault,
-                    file_name="BOTMan_Prediction_Vault.csv",
-                    mime="text/csv",
+                    label="📥 Download Compressed Vault (ZIP)",
+                    data=zip_buffer.getvalue(),
+                    file_name="BOTMan_Prediction_Vault.zip",
+                    mime="application/zip",
                     use_container_width=True
                 )
             except Exception as e:
