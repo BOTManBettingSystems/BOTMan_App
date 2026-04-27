@@ -264,18 +264,14 @@ def prep_system_builder_data(_df, _model, feats, _shadow_model=None, shadow_feat
         b_df['Rank'] = b_df.groupby(['Date_Key', 'Time', 'Course'])['ML_Prob'].rank(ascending=False, method='min')
         b_df['Value Price'] = 1 / b_df['ML_Prob']
     # --- END OF VAULT BRIDGE ---
-
     # --- CALIBRATED BRAIN INTEGRATION (TRUE VALUE & EDGE) ---
     if _cal_model is not None:
         b_df['True_AI_Prob'] = _cal_model.predict_proba(b_df[feats].fillna(0))[:, 1]
         b_df['Cal_Value_Price'] = np.where(b_df['True_AI_Prob'] > 0.001, 1.0 / b_df['True_AI_Prob'], 1000.0)
         
-        # Calculate Edge against the Leashed model
-        market_p = np.where(pd.to_numeric(b_df.get('BSP', 0), errors='coerce') > 0, 
-                            pd.to_numeric(b_df.get('BSP', 0), errors='coerce'), 
-                            pd.to_numeric(b_df.get('7:30AM Price', 0), errors='coerce'))
-        
-        b_df['Value_Edge_Perc'] = ((market_p / b_df['Cal_Value_Price']) - 1) * 100
+        # --- NEW: Edge is strictly locked to the 7:30AM Morning Price ---
+        safe_morning_price = pd.to_numeric(b_df.get('7:30AM Price', 0), errors='coerce').fillna(0)
+        b_df['Value_Edge_Perc'] = np.where(b_df['Cal_Value_Price'] > 0, ((safe_morning_price / b_df['Cal_Value_Price']) - 1) * 100, 0.0)
         
         # Edge Brackets for X-Ray
         v_bins = [-np.inf, 0.0, 10.0, 20.0, np.inf]
@@ -1100,17 +1096,26 @@ else:
                         df_smart_master['Horse'] = df_smart_master['Horse'].astype(str).str.strip().str.title()
                         df_a['Horse'] = df_a['Horse'].astype(str).str.strip().str.title()
                         
-                        merged_smart = pd.merge(df_smart_master, df_a, on=['Date_Key', 'Time', 'Course', 'Horse'], how='inner')
+                        # --- THE KEYERROR FIX ---
+                        # If df_a has overlapping columns, pd.merge renames them to _x and _y, crashing the app.
+                        # We strip out any overlap from df_a before the merge to protect the Master file.
+                        overlap = [c for c in df_a.columns if c in df_smart_master.columns and c not in ['Date_Key', 'Time', 'Course', 'Horse']]
+                        df_a_clean = df_a.drop(columns=overlap)
+                        
+                        merged_smart = pd.merge(df_smart_master, df_a_clean, on=['Date_Key', 'Time', 'Course', 'Horse'], how='inner')
                         merged_smart['Fin Pos'] = pd.to_numeric(merged_smart['Fin Pos'], errors='coerce')
                         merged_smart = merged_smart[merged_smart['Fin Pos'] > 0]
                         
                         if not merged_smart.empty:
                             # --- 🧠 INJECT THE DOUBLE-BRAIN ENGINE HERE ---
-                            # This attaches the Vault's Original AI and calculates the new Leashed AI dynamically
+                            # Attaches the Vault's Original AI and calculates the Leashed AI dynamically for the CSV export
                             merged_smart = prep_system_builder_data(merged_smart, model, feats, shadow_model, shadow_feats, cal_model, is_live_today=False, use_vault=True)
                             
                             if sys_col_found is None:
                                 merged_smart['System Name'] = 'All Systems Combined'
+                                sys_col_found = 'System Name'
+                            else:
+                                merged_smart['System Name'] = merged_smart[sys_col_found]
                                 sys_col_found = 'System Name'
 
                             merged_smart['Win P/L <2%'] = pd.to_numeric(merged_smart['Win P/L <2%'], errors='coerce').fillna(0)
