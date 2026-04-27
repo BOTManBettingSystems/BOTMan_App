@@ -1170,7 +1170,8 @@ else:
                                 else:
                                     sub_df = merged_smart[(merged_smart[sys_col_found] == row[sys_col_found]) & (merged_smart['Month_Yr'] == row['Period'])]
                                     
-                               # --- FULL CSV DOWNLOAD WITH REORDERED DOUBLE-BRAIN COLUMNS ---
+                                # --- FULL CSV DOWNLOAD WITH REORDERED DOUBLE-BRAIN COLUMNS ---
+                                # 1. Define the columns we want pinned to the front
                                 base_cols = ['Date', 'Time', 'Course', 'Horse', '7:30AM Price']
                                 brain_cols = ['ML_Prob', 'Value Price', 'True_AI_Prob', 'Cal_Value_Price', 'Value_Edge_Perc']
                                 
@@ -1178,10 +1179,10 @@ else:
                                 safe_base = [c for c in base_cols if c in sub_df.columns]
                                 safe_brain = [c for c in brain_cols if c in sub_df.columns]
                                 
-                                # Get all other columns that aren't in base or brain lists
+                                # 2. Gather every single other column from your 75-column database
                                 other_cols = [c for c in sub_df.columns if c not in safe_base and c not in safe_brain]
                                 
-                                # Combine them for the final layout (Base + Brain + Everything Else)
+                                # 3. Stitch them together so the brain columns are immediately after 7:30AM Price
                                 final_export_cols = safe_base + safe_brain + other_cols
                                 
                                 csv_b64 = base64.b64encode(sub_df[final_export_cols].to_csv(index=False).encode('utf-8')).decode()
