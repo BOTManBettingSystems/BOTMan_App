@@ -81,6 +81,7 @@ def load_all_data():
             s = str(x).split('.')[0].strip()
             if len(s) > 6: s = s[-6:]
             return s
+            
         df_all['Date_Key'] = df_all['Date'].apply(clean_date)
         df_all['Date_DT'] = pd.to_datetime(df_all['Date_Key'], format='%y%m%d', errors='coerce')
         
