@@ -229,36 +229,46 @@ def prep_system_builder_data(_df, _model, feats, _shadow_model=None, shadow_feat
     
 # --- THE PREDICTION VAULT BRIDGE ---
     if os.path.exists("BOTMan_Prediction_Vault.csv") and not is_live_today and use_vault:
-        vault_df = pd.read_csv("BOTMan_Prediction_Vault.csv")
-        
-        for c in ['Date', 'Time', 'Course', 'Horse']:
-            if c in vault_df.columns and c in b_df.columns:
-                vault_df[c] = vault_df[c].astype(str).str.strip()
-                b_df[c] = b_df[c].astype(str).str.strip()
-                
-        # Check if this is the Old Vault (1 Brain) or New Vault (2 Brains)
-        has_leashed_vault = 'True_AI_Prob' in vault_df.columns
-        
-        rename_dict = {'ML_Prob': 'ML_Prob_vault', 'Rank': 'Rank_vault', 'Value Price': 'Value Price_vault'}
-        if has_leashed_vault:
-            rename_dict.update({'True_AI_Prob': 'True_AI_Prob_vault', 'Cal_Value_Price': 'Cal_Value_Price_vault'})
+        try:
+            vault_df = pd.read_csv("BOTMan_Prediction_Vault.csv")
+            # 🛡️ BUG FIX 1: If the vault is corrupted or missing headers, ignore it
+            if not all(c in vault_df.columns for c in ['Date', 'Time', 'Course', 'Horse']):
+                vault_df = pd.DataFrame()
+        except:
+            vault_df = pd.DataFrame()
+
+        if not vault_df.empty:
+            for c in ['Date', 'Time', 'Course', 'Horse']:
+                if c in vault_df.columns and c in b_df.columns:
+                    vault_df[c] = vault_df[c].astype(str).str.strip()
+                    b_df[c] = b_df[c].astype(str).str.strip()
+                    
+            has_leashed_vault = 'True_AI_Prob' in vault_df.columns
             
-        v_cols = ['Date', 'Time', 'Course', 'Horse'] + list(rename_dict.keys())
-        v_sub = vault_df[[c for c in v_cols if c in vault_df.columns]].rename(columns=rename_dict)
+            rename_dict = {'ML_Prob': 'ML_Prob_vault', 'Rank': 'Rank_vault', 'Value Price': 'Value Price_vault'}
+            if has_leashed_vault:
+                rename_dict.update({'True_AI_Prob': 'True_AI_Prob_vault', 'Cal_Value_Price': 'Cal_Value_Price_vault'})
+                
+            v_cols = ['Date', 'Time', 'Course', 'Horse'] + list(rename_dict.keys())
+            
+            # 🛡️ BUG FIX 2: Ensure v_sub is a proper DataFrame and has the merge keys
+            available_v_cols = [c for c in v_cols if c in vault_df.columns]
+            if all(k in available_v_cols for k in ['Date', 'Time', 'Course', 'Horse']):
+                v_sub = vault_df[available_v_cols].rename(columns=rename_dict)
+                b_df = pd.merge(b_df, v_sub, on=['Date', 'Time', 'Course', 'Horse'], how='left')
+            else:
+                vault_df = pd.DataFrame() # Fallback to empty logic
         
-        b_df = pd.merge(b_df, v_sub, on=['Date', 'Time', 'Course', 'Horse'], how='left')
-        
-        # 🛡️ BUG FIX: Ensure the mask doesn't fail if the vault is entirely empty
-        if 'ML_Prob_vault' in b_df.columns:
-            missing_mask = b_df['ML_Prob_vault'].isna()
-        else:
+        # If vault was empty or failed validation, create dummy mask
+        if vault_df.empty or 'ML_Prob_vault' not in b_df.columns:
             missing_mask = pd.Series(True, index=b_df.index)
-        
+        else:
+            missing_mask = b_df['ML_Prob_vault'].isna()
+            
         if missing_mask.any():
             new_horses = b_df[missing_mask].copy()
             new_probs = _model.predict_proba(new_horses[feats].fillna(0))[:, 1]
             
-            # 🛡️ BUG FIX: Initialize columns before assignment to prevent Pandas length crash
             if 'ML_Prob' not in b_df.columns: b_df['ML_Prob'] = np.nan
             b_df.loc[missing_mask, 'ML_Prob'] = new_probs
             
@@ -278,7 +288,6 @@ def prep_system_builder_data(_df, _model, feats, _shadow_model=None, shadow_feat
             if _cal_model is not None:
                 new_cal_probs = _cal_model.predict_proba(new_horses[feats].fillna(0))[:, 1]
                 
-                # 🛡️ BUG FIX: Initialize columns before assignment
                 if 'True_AI_Prob' not in b_df.columns: b_df['True_AI_Prob'] = np.nan
                 b_df.loc[missing_mask, 'True_AI_Prob'] = new_cal_probs
                 
@@ -294,16 +303,20 @@ def prep_system_builder_data(_df, _model, feats, _shadow_model=None, shadow_feat
             if _cal_model is not None: append_cols += ['True_AI_Prob', 'Cal_Value_Price']
             
             append_df = b_df[missing_mask][[c for c in append_cols if c in b_df.columns]]
-            append_df.to_csv("BOTMan_Prediction_Vault.csv", mode='a', header=False, index=False)
+            
+            # 🛡️ BUG FIX 3: Write headers if file doesn't exist to prevent headerless corruption
+            write_header = not os.path.exists("BOTMan_Prediction_Vault.csv") or os.path.getsize("BOTMan_Prediction_Vault.csv") == 0
+            append_df.to_csv("BOTMan_Prediction_Vault.csv", mode='a', header=write_header, index=False)
         else:
             b_df['ML_Prob'] = b_df['ML_Prob_vault']
             b_df['Rank'] = b_df['Rank_vault']
             b_df['Value Price'] = b_df['Value Price_vault']
-            if has_leashed_vault:
+            if 'True_AI_Prob_vault' in b_df.columns:
                 b_df['True_AI_Prob'] = b_df['True_AI_Prob_vault']
                 b_df['Cal_Value_Price'] = b_df['Cal_Value_Price_vault']
             
-        b_df = b_df.drop(columns=[c for c in rename_dict.values() if c in b_df.columns])
+        drop_cols = [c for c in ['ML_Prob_vault', 'Rank_vault', 'Value Price_vault', 'True_AI_Prob_vault', 'Cal_Value_Price_vault'] if c in b_df.columns]
+        b_df = b_df.drop(columns=drop_cols)
         
     else:
         b_df['ML_Prob'] = _model.predict_proba(b_df[feats].fillna(0))[:, 1]
