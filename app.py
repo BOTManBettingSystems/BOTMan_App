@@ -1126,29 +1126,32 @@ else:
                             return s[-6:] if len(s) > 6 else s
                             
                         df_smart_master['Date_Key'] = df_smart_master['Date'].apply(clean_d)
-                        
-                        # --- BULLETPROOF MERGE PREP ---
                         df_smart_master['Time'] = df_smart_master['Time'].astype(str).str.split('.').str[0].str.strip()
+                        df_smart_master['Course'] = df_smart_master['Course'].astype(str).str.strip().str.title()
+                        df_smart_master['Horse'] = df_smart_master['Horse'].astype(str).str.strip().str.title()
+                        
                         df_a = df_all.copy()
                         df_a['Time'] = df_a['Time'].astype(str).str.split('.').str[0].str.strip()
-                        
-                        df_smart_master['Course'] = df_smart_master['Course'].astype(str).str.strip().str.title()
                         df_a['Course'] = df_a['Course'].astype(str).str.strip().str.title()
-                        
-                        df_smart_master['Horse'] = df_smart_master['Horse'].astype(str).str.strip().str.title()
                         df_a['Horse'] = df_a['Horse'].astype(str).str.strip().str.title()
                         
-                        # --- THE FIX: Drop overlapping columns to prevent _x and _y crashes ---
-                        overlap_cols = [c for c in df_a.columns if c in df_smart_master.columns and c not in ['Date_Key', 'Time', 'Course', 'Horse']]
-                        df_a_clean = df_a.drop(columns=overlap_cols)
+                        # --- THE SMOKING GUN FIX: PREVENTING _x AND _y MERGE CRASHES ---
+                        # We only extract the IDs and the System Name from your ODS file.
+                        # We let df_a (the database) provide the pure 7:30AM Price, BSP, and Fin Pos.
+                        # This completely stops Pandas from renaming columns and causing KeyErrors.
+                        keys_to_keep = ['Date_Key', 'Time', 'Course', 'Horse']
+                        if sys_col_found: keys_to_keep.append(sys_col_found)
+                        if 'Value' in df_smart_master.columns: keys_to_keep.append('Value')
                         
-                        merged_smart = pd.merge(df_smart_master, df_a_clean, on=['Date_Key', 'Time', 'Course', 'Horse'], how='inner')
+                        ods_clean = df_smart_master[keys_to_keep].copy()
+                        
+                        merged_smart = pd.merge(ods_clean, df_a, on=['Date_Key', 'Time', 'Course', 'Horse'], how='inner')
                         merged_smart['Fin Pos'] = pd.to_numeric(merged_smart['Fin Pos'], errors='coerce')
                         merged_smart = merged_smart[merged_smart['Fin Pos'] > 0]
                         
                         if not merged_smart.empty:
                             
-                            # --- INJECT DOUBLE-BRAIN MATH HERE ---
+                            # --- INJECT DOUBLE-BRAIN MATH ---
                             merged_smart = prep_system_builder_data(merged_smart, model, feats, shadow_model, shadow_feats, cal_model, is_live_today=False, use_vault=True)
                             
                             if sys_col_found is None:
