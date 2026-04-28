@@ -1146,7 +1146,8 @@ else:
                         
                         df_ods_clean = df_smart_master[keep_cols].copy()
                         
-                        merged_smart = pd.merge(df_ods_clean, df_a, on=['Date_Key', 'Time', 'Course', 'Horse'], how='inner')
+                        # Change df_a to df_all to reconnect the full 2-year history
+                        merged_smart = pd.merge(df_ods_clean, df_all, on=['Date_Key', 'Time', 'Course', 'Horse'], how='inner')
                         # ----------------------------------------------------------
 
                         merged_smart['Fin Pos'] = pd.to_numeric(merged_smart['Fin Pos'], errors='coerce')
