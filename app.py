@@ -81,6 +81,7 @@ def load_all_data():
             s = str(x).split('.')[0].strip()
             if len(s) > 6: s = s[-6:]
             return s
+            
         df_all['Date_Key'] = df_all['Date'].apply(clean_date)
         df_all['Date_DT'] = pd.to_datetime(df_all['Date_Key'], format='%y%m%d', errors='coerce')
         
@@ -215,51 +216,112 @@ def prep_system_builder_data(_df, _model, feats, _shadow_model=None, shadow_feat
         
     if not is_live_today:
         b_df = b_df[b_df.get('Fin Pos', 0) > 0].copy()
-    
+
+    # --- 🛡️ CRITICAL FIX: THE EMPTY DATAFRAME SHIELD ---
+    if b_df.empty:
+        for col in ['ML_Prob', 'Rank', 'Value Price', 'True_AI_Prob', 'Cal_Value_Price', 'Value_Edge_Perc', 'Shadow_Prob', 'Pure Rank', 'Rank2_Prob', 'Prob Gap', 'User Value']:
+            if col not in b_df.columns:
+                b_df[col] = 0.0
+        b_df['Edge Bracket'] = 'Unknown'
+        return b_df
+    # ---------------------------------------------------
+
     # --- THE PREDICTION VAULT BRIDGE ---
+    # 🛡️ NEW: Auto-Unzip the Vault if the compressed version is uploaded
+    if os.path.exists("BOTMan_Prediction_Vault.zip") and not os.path.exists("BOTMan_Prediction_Vault.csv"):
+        try:
+            with zipfile.ZipFile("BOTMan_Prediction_Vault.zip", 'r') as zip_ref:
+                zip_ref.extractall(".")
+        except:
+            pass
+
     if os.path.exists("BOTMan_Prediction_Vault.csv") and not is_live_today and use_vault:
-        vault_df = pd.read_csv("BOTMan_Prediction_Vault.csv")
-        
-        # Force strict string matching to prevent subtle join failures
-        for c in ['Date', 'Time', 'Course', 'Horse']:
-            if c in vault_df.columns and c in b_df.columns:
-                vault_df[c] = vault_df[c].astype(str).str.strip()
-                b_df[c] = b_df[c].astype(str).str.strip()
+        try:
+            vault_df = pd.read_csv("BOTMan_Prediction_Vault.csv")
+            if not all(c in vault_df.columns for c in ['Date', 'Time', 'Course', 'Horse']):
+                vault_df = pd.DataFrame()
+        except:
+            vault_df = pd.DataFrame()
+
+        if not vault_df.empty:
+            for c in ['Date', 'Time', 'Course', 'Horse']:
+                if c in vault_df.columns and c in b_df.columns:
+                    vault_df[c] = vault_df[c].astype(str).str.strip()
+                    b_df[c] = b_df[c].astype(str).str.strip()
+                    
+            has_leashed_vault = 'True_AI_Prob' in vault_df.columns
+            
+            rename_dict = {'ML_Prob': 'ML_Prob_vault', 'Rank': 'Rank_vault', 'Value Price': 'Value Price_vault'}
+            if has_leashed_vault:
+                rename_dict.update({'True_AI_Prob': 'True_AI_Prob_vault', 'Cal_Value_Price': 'Cal_Value_Price_vault'})
                 
-        # FIX: Explicitly rename columns before merge so we don't rely on Pandas suffix behavior
-        v_sub = vault_df[['Date', 'Time', 'Course', 'Horse', 'ML_Prob', 'Rank', 'Value Price']].rename(
-            columns={'ML_Prob': 'ML_Prob_vault', 'Rank': 'Rank_vault', 'Value Price': 'Value Price_vault'}
-        )
+            v_cols = ['Date', 'Time', 'Course', 'Horse'] + list(rename_dict.keys())
+            
+            available_v_cols = [c for c in v_cols if c in vault_df.columns]
+            if all(k in available_v_cols for k in ['Date', 'Time', 'Course', 'Horse']):
+                v_sub = vault_df[available_v_cols].rename(columns=rename_dict)
+                b_df = pd.merge(b_df, v_sub, on=['Date', 'Time', 'Course', 'Horse'], how='left')
+            else:
+                vault_df = pd.DataFrame() 
         
-        # Merge the frozen AI opinions onto the historical facts
-        b_df = pd.merge(b_df, v_sub, on=['Date', 'Time', 'Course', 'Horse'], how='left')
-                        
-        # Identify which horses are brand new and missing from the Vault
-        missing_mask = b_df['ML_Prob_vault'].isna()
-        
+        if vault_df.empty or 'ML_Prob_vault' not in b_df.columns:
+            missing_mask = pd.Series(True, index=b_df.index)
+        else:
+            missing_mask = b_df['ML_Prob_vault'].isna()
+            
         if missing_mask.any():
-            # Predict ONLY the new horses dynamically
             new_horses = b_df[missing_mask].copy()
             new_probs = _model.predict_proba(new_horses[feats].fillna(0))[:, 1]
+            
+            if 'ML_Prob' not in b_df.columns: b_df['ML_Prob'] = np.nan
             b_df.loc[missing_mask, 'ML_Prob'] = new_probs
             
-            # Combine the frozen vault data with the new live calculations
-            b_df['ML_Prob'] = b_df['ML_Prob_vault'].fillna(b_df.get('ML_Prob'))
-            b_df['Rank'] = b_df['Rank_vault'].fillna(b_df.groupby(['Date_Key', 'Time', 'Course'])['ML_Prob'].rank(ascending=False, method='min'))
-            b_df['Value Price'] = b_df['Value Price_vault'].fillna(1 / b_df['ML_Prob'])
+            if 'ML_Prob_vault' in b_df.columns:
+                b_df['ML_Prob'] = b_df['ML_Prob_vault'].fillna(b_df['ML_Prob'])
+                
+            if 'Rank_vault' in b_df.columns:
+                b_df['Rank'] = b_df['Rank_vault'].fillna(b_df.groupby(['Date_Key', 'Time', 'Course'])['ML_Prob'].rank(ascending=False, method='min'))
+            else:
+                b_df['Rank'] = b_df.groupby(['Date_Key', 'Time', 'Course'])['ML_Prob'].rank(ascending=False, method='min')
+                
+            if 'Value Price_vault' in b_df.columns:
+                b_df['Value Price'] = b_df['Value Price_vault'].fillna(1 / b_df['ML_Prob'])
+            else:
+                b_df['Value Price'] = 1 / b_df['ML_Prob']
             
-            # Auto-Append the new horses to the Vault CSV quietly in the background
-            append_df = b_df[missing_mask][['Date', 'Time', 'Course', 'Horse', 'ML_Prob', 'Rank', 'Value Price']]
-            append_df.to_csv("BOTMan_Prediction_Vault.csv", mode='a', header=False, index=False)
+            if _cal_model is not None:
+                new_cal_probs = _cal_model.predict_proba(new_horses[feats].fillna(0))[:, 1]
+                
+                if 'True_AI_Prob' not in b_df.columns: b_df['True_AI_Prob'] = np.nan
+                b_df.loc[missing_mask, 'True_AI_Prob'] = new_cal_probs
+                
+                if 'True_AI_Prob_vault' in b_df.columns:
+                    b_df['True_AI_Prob'] = b_df['True_AI_Prob_vault'].fillna(b_df['True_AI_Prob'])
+                    
+                if 'Cal_Value_Price_vault' in b_df.columns:
+                    b_df['Cal_Value_Price'] = b_df['Cal_Value_Price_vault'].fillna(np.where(b_df['True_AI_Prob'] > 0.001, 1.0 / b_df['True_AI_Prob'], 1000.0))
+                else:
+                    b_df['Cal_Value_Price'] = np.where(b_df['True_AI_Prob'] > 0.001, 1.0 / b_df['True_AI_Prob'], 1000.0)
+            
+            append_cols = ['Date', 'Time', 'Course', 'Horse', 'ML_Prob', 'Rank', 'Value Price']
+            if _cal_model is not None: append_cols += ['True_AI_Prob', 'Cal_Value_Price']
+            
+            append_df = b_df[missing_mask][[c for c in append_cols if c in b_df.columns]]
+            
+            write_header = not os.path.exists("BOTMan_Prediction_Vault.csv") or os.path.getsize("BOTMan_Prediction_Vault.csv") == 0
+            append_df.to_csv("BOTMan_Prediction_Vault.csv", mode='a', header=write_header, index=False)
         else:
             b_df['ML_Prob'] = b_df['ML_Prob_vault']
             b_df['Rank'] = b_df['Rank_vault']
             b_df['Value Price'] = b_df['Value Price_vault']
+            if 'True_AI_Prob_vault' in b_df.columns:
+                b_df['True_AI_Prob'] = b_df['True_AI_Prob_vault']
+                b_df['Cal_Value_Price'] = b_df['Cal_Value_Price_vault']
             
-        b_df = b_df.drop(columns=['ML_Prob_vault', 'Rank_vault', 'Value Price_vault'])
+        drop_cols = [c for c in ['ML_Prob_vault', 'Rank_vault', 'Value Price_vault', 'True_AI_Prob_vault', 'Cal_Value_Price_vault'] if c in b_df.columns]
+        b_df = b_df.drop(columns=drop_cols)
         
     else:
-        # Fallback (or if it's today's live predictions)
         b_df['ML_Prob'] = _model.predict_proba(b_df[feats].fillna(0))[:, 1]
         b_df['Rank'] = b_df.groupby(['Date_Key', 'Time', 'Course'])['ML_Prob'].rank(ascending=False, method='min')
         b_df['Value Price'] = 1 / b_df['ML_Prob']
@@ -267,8 +329,9 @@ def prep_system_builder_data(_df, _model, feats, _shadow_model=None, shadow_feat
 
     # --- CALIBRATED BRAIN INTEGRATION (TRUE VALUE & EDGE) ---
     if _cal_model is not None:
-        b_df['True_AI_Prob'] = _cal_model.predict_proba(b_df[feats].fillna(0))[:, 1]
-        b_df['Cal_Value_Price'] = np.where(b_df['True_AI_Prob'] > 0.001, 1.0 / b_df['True_AI_Prob'], 1000.0)
+        if 'True_AI_Prob' not in b_df.columns:
+            b_df['True_AI_Prob'] = _cal_model.predict_proba(b_df[feats].fillna(0))[:, 1]
+            b_df['Cal_Value_Price'] = np.where(b_df['True_AI_Prob'] > 0.001, 1.0 / b_df['True_AI_Prob'], 1000.0)
         
         # Calculate Edge against the Leashed model
         market_p = np.where(pd.to_numeric(b_df.get('BSP', 0), errors='coerce') > 0, 
@@ -446,7 +509,6 @@ if st.session_state.get("is_admin") and st.session_state.get("show_admin_insight
 # --- NEW: LOGIN LOG VIEWER ---
     with st.expander("📋 View Daily App Access Logs", expanded=False):
         if os.path.exists("login_history.csv"):
-            # UPDATED: Now correctly expects all 3 columns to prevent the crash!
             log_df = pd.read_csv("login_history.csv", names=["Date & Time", "User Type", "Session ID"])
             st.dataframe(log_df.sort_values(by="Date & Time", ascending=False), use_container_width=True, hide_index=True)
         else:
@@ -460,26 +522,26 @@ if st.session_state.get("is_admin") and st.session_state.get("show_admin_insight
     if st.button("Freeze Historical Predictions (Build Vault)", type="primary", use_container_width=True):
         with st.spinner("Processing 2 years of history... This may take a minute."):
             try:
-                # 1. Get the historical records with valid finishes
                 history_df = df_all[df_all['Fin Pos'] > 0].copy()
-                
-                # 2. Run them through the CURRENT AI brain
                 vault_df = prep_system_builder_data(history_df, model, feats, shadow_model, shadow_feats, cal_model)
                 
-                # 3. Strip it down to just the IDs and the AI Opinions
-                vault_cols = ['Date', 'Time', 'Course', 'Horse', 'ML_Prob', 'Rank', 'Value Price']
+                # Strip it down to just the IDs and the Double-Brain AI Opinions
+                vault_cols = ['Date', 'Time', 'Course', 'Horse', 'ML_Prob', 'Rank', 'Value Price', 'True_AI_Prob', 'Cal_Value_Price']
                 available_cols = [c for c in vault_cols if c in vault_df.columns]
                 final_vault = vault_df[available_cols]
                 
-                # 4. Generate the CSV file
-                csv_vault = final_vault.to_csv(index=False).encode('utf-8')
+                # Generate a compressed ZIP file to bypass upload limits
+                import io
+                zip_buffer = io.BytesIO()
+                with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED, False) as zip_file:
+                    zip_file.writestr("BOTMan_Prediction_Vault.csv", final_vault.to_csv(index=False).encode('utf-8'))
                 
                 st.success(f"Vault generated successfully! ({len(final_vault)} records frozen)")
                 st.download_button(
-                    label="📥 Download BOTMan_Prediction_Vault.csv",
-                    data=csv_vault,
-                    file_name="BOTMan_Prediction_Vault.csv",
-                    mime="text/csv",
+                    label="📥 Download Compressed Vault (ZIP)",
+                    data=zip_buffer.getvalue(),
+                    file_name="BOTMan_Prediction_Vault.zip",
+                    mime="application/zip",
                     use_container_width=True
                 )
             except Exception as e:
@@ -512,7 +574,6 @@ if st.session_state.get("is_admin") and st.session_state.get("show_admin_insight
         
         selected_factors = st.multiselect("Select Factors to Combine (Choose 1 to 4):", avail_cols, default=['No. of Top', 'Speed Rank'])
         
-        # --- NEW: OBJECTIVE TARGET FILTERS ---
         st.markdown("<div style='margin-top: 10px; margin-bottom: 5px; font-weight: bold; color: #1a3a5f;'>🎯 Filter by Objective Targets:</div>", unsafe_allow_html=True)
         o_col1, o_col2 = st.columns(2)
         with o_col1:
@@ -538,39 +599,30 @@ if st.session_state.get("is_admin") and st.session_state.get("show_admin_insight
                     import itertools
                     with st.spinner(f"Mining database for HIGH-VOLUME robust systems hitting {min_sr}% S/R and {min_roi}% ROI..."):
                         discovered_systems = []
-                        
-                        # --- 1. RUTHLESS FEATURE PRUNING (Anti-Overfitting) ---
                         disc_df = ins_df.copy()
                         smart_cols = []
                         
-                        # A. The Consensus Feature (The ultimate robust metric)
                         core_ranks = [c for c in ['Speed Rank', 'Form Rank', 'MSAI Rank', 'PRB Rank', 'Primary Rank', 'Pure Rank'] if c in disc_df.columns]
                         if core_ranks:
                             disc_df['Ratings in Top 3'] = (disc_df[core_ranks] <= 3).sum(axis=1).astype(str) + f" of {len(core_ranks)}"
                             smart_cols.append('Ratings in Top 3')
                             
-                        # B. Only allow the absolute strongest Ranks (No age, sex, or exact prices allowed)
                         allowed_ranks = ['Speed Rank', 'Primary Rank', 'Pure Rank', 'MSAI Rank']
                         for c in allowed_ranks:
                             if c in disc_df.columns:
                                 disc_df[c] = pd.to_numeric(disc_df[c], errors='coerce')
-                                # We only care about the elite horses for system building
                                 disc_df[f"{c} Tier"] = pd.cut(disc_df[c], bins=[0, 1, 3, 999], labels=["Rank 1", "Ranks 2-3", "Garbage"])
                                 smart_cols.append(f"{c} Tier")
                                 
-                        # C. Macro Conditions Only
                         if 'Race Type' in disc_df.columns: smart_cols.append('Race Type')
                         if 'H/Cap' in disc_df.columns: smart_cols.append('H/Cap')
                         
-                        # --- 2. RUN COMBINATIONS ---
                         combos = []
                         for r in range(1, search_depth + 1):
                             combos.extend(list(itertools.combinations(smart_cols, r)))
                             
                         progress_bar = st.progress(0)
                         total_combos = len(combos)
-                        
-                        # ANTI-OVERFITTING SAFETY NET: Force a minimum sample size to kill random variance
                         safe_min_bets = max(min_bets, 50) 
                         
                         for i, combo in enumerate(combos):
@@ -579,10 +631,7 @@ if st.session_state.get("is_admin") and st.session_state.get("show_admin_insight
                                 Bets=('Horse', 'count'), Wins=('Is_Win', 'sum'), Profit=('Win P/L <2%', 'sum')
                             ).reset_index()
                             
-                            # Enforce the strict volume threshold
                             grp = grp[grp['Bets'] >= safe_min_bets]
-                                
-                            # Remove "Garbage" tiers so it doesn't suggest betting Rank 14s
                             for f in factors:
                                 if "Tier" in f:
                                     grp = grp[grp[f] != "Garbage"]
@@ -590,7 +639,6 @@ if st.session_state.get("is_admin") and st.session_state.get("show_admin_insight
                             if not grp.empty:
                                 grp['Strike Rate (%)'] = (grp['Wins'] / grp['Bets']) * 100
                                 grp['Win ROI (%)'] = (grp['Profit'] / grp['Bets']) * 100
-                                
                                 winners = grp[(grp['Strike Rate (%)'] >= min_sr) & (grp['Win ROI (%)'] >= min_roi)].copy()
                                 
                                 for _, w in winners.iterrows():
@@ -610,11 +658,9 @@ if st.session_state.get("is_admin") and st.session_state.get("show_admin_insight
                         if discovered_systems:
                             st.success(f"🔥 Found {len(discovered_systems)} robust rules (All enforced to have Min {safe_min_bets} bets)!")
                             res_df = pd.DataFrame(discovered_systems).drop_duplicates(subset=["Winning Rule"])
-                            
                             sort_map = {"Win P/L": "Win P/L", "Win ROI (%)": "ROI (%)", "Win S/R (%)": "S/R (%)"}
                             sort_col = sort_map.get(target_metric, 'Win P/L')
                             res_df = res_df.sort_values(sort_col, ascending=False).head(100)
-                            
                             st.dataframe(res_df, use_container_width=True, hide_index=True)
                         else:
                             st.warning(f"No robust combinations found. (Filtered for a strict minimum of {safe_min_bets} bets to prevent random luck). Try lowering targets.")
@@ -641,7 +687,6 @@ if st.session_state.get("is_admin") and st.session_state.get("show_admin_insight
                 grp['Place ROI (%)'] = (grp['Place_Profit'] / grp['Bets']) * 100
                 grp['Total P/L'] = grp['Profit'] + grp['Place_Profit']
                 
-                # --- APPLY THE NEW OBJECTIVE FILTERS ---
                 grp = grp[(grp['Strike Rate (%)'] >= min_sr) & (grp['Win ROI (%)'] >= min_roi)]
                 
                 if grp.empty:
@@ -753,7 +798,6 @@ else:
                 ideal_csv_cols = ['Date', 'Time', 'Course', 'Horse', '7:30AM Price', 'ML_Prob', 'Rank', 'No. of Top']
                 existing_csv_cols = [c for c in ideal_csv_cols if c in df_p.columns]
                 
-                # Prepare both datasets
                 csv_out_top2 = df_p[df_p['Rank'] <= 2][existing_csv_cols].copy()
                 csv_out_full = df_p[existing_csv_cols].copy()
                 
@@ -761,7 +805,6 @@ else:
                 file_top2 = f"BOTMan_Top2_AIPredictions_{timestamp}.csv"
                 file_full = f"BOTMan_Full_AIPredictions_{timestamp}.csv"
                 
-                # Make room for the second button
                 col_dl1, col_dl2, col_spacer, col_col = st.columns([1.2, 1.2, 2.1, 0.5])
                 
                 with col_dl1:
@@ -1088,29 +1131,40 @@ else:
                         df_smart_master['Date_Key'] = df_smart_master['Date'].apply(clean_d)
                         
                         # --- BULLETPROOF MERGE PREP ---
-                        # 1. Strip the silent ".0" floats that Pandas adds to the ODS file
                         df_smart_master['Time'] = df_smart_master['Time'].astype(str).str.split('.').str[0].str.strip()
                         df_a = df_all.copy()
                         df_a['Time'] = df_a['Time'].astype(str).str.split('.').str[0].str.strip()
                         
-                        # 2. Force strict Title Case to ignore upstream capitalization glitches
                         df_smart_master['Course'] = df_smart_master['Course'].astype(str).str.strip().str.title()
                         df_a['Course'] = df_a['Course'].astype(str).str.strip().str.title()
                         
                         df_smart_master['Horse'] = df_smart_master['Horse'].astype(str).str.strip().str.title()
                         df_a['Horse'] = df_a['Horse'].astype(str).str.strip().str.title()
                         
-                        merged_smart = pd.merge(df_smart_master, df_a, on=['Date_Key', 'Time', 'Course', 'Horse'], how='inner')
+                        # Drop overlapping columns to prevent _x / _y Pandas KeyError crashes
+                        overlap = [c for c in df_a.columns if c in df_smart_master.columns and c not in ['Date_Key', 'Time', 'Course', 'Horse']]
+                        df_a_clean = df_a.drop(columns=overlap)
+                        
+                        merged_smart = pd.merge(df_smart_master, df_a_clean, on=['Date_Key', 'Time', 'Course', 'Horse'], how='inner')
                         merged_smart['Fin Pos'] = pd.to_numeric(merged_smart['Fin Pos'], errors='coerce')
                         merged_smart = merged_smart[merged_smart['Fin Pos'] > 0]
                         
                         if not merged_smart.empty:
-                            if sys_col_found is None:
-                                merged_smart['System Name'] = 'All Systems Combined'
-                                sys_col_found = 'System Name'
-                            else:
-                                merged_smart['System Name'] = merged_smart[sys_col_found]
-                                sys_col_found = 'System Name'
+                            # --- 🧠 INJECT DOUBLE-BRAIN FOR THE CSV EXPORT ---
+                            merged_smart = prep_system_builder_data(merged_smart, model, feats, shadow_model, shadow_feats, cal_model, is_live_today=False, use_vault=True)
+                            
+                            # --- 🛡️ THE BULLETPROOF GROUPBY SHIELD ---
+                            actual_sys_col = 'System Name'
+                            if sys_col_found and sys_col_found in merged_smart.columns:
+                                merged_smart[actual_sys_col] = merged_smart[sys_col_found]
+                            elif sys_col_found and sys_col_found.strip() in merged_smart.columns:
+                                merged_smart[actual_sys_col] = merged_smart[sys_col_found.strip()]
+                            elif actual_sys_col not in merged_smart.columns:
+                                merged_smart[actual_sys_col] = 'All Systems Combined'
+                                
+                            # Force column to strictly be strings and eliminate any NaNs prior to groupby
+                            merged_smart[actual_sys_col] = merged_smart[actual_sys_col].fillna('Unknown System').astype(str)
+                            # ------------------------------------------
 
                             merged_smart['Win P/L <2%'] = pd.to_numeric(merged_smart['Win P/L <2%'], errors='coerce').fillna(0)
                             merged_smart['Place P/L <2%'] = pd.to_numeric(merged_smart['Place P/L <2%'], errors='coerce').fillna(0)
@@ -1121,21 +1175,25 @@ else:
                             merged_smart['Month_Yr'] = merged_smart['Date_DT'].dt.strftime('%Y - %b')
                             current_month_str = datetime.now().strftime('%Y - %b')
                             
-                            all_time = merged_smart.groupby(sys_col_found, observed=False).agg(
+                            all_time = merged_smart.groupby(actual_sys_col, observed=False).agg(
                                 Bets=('Horse', 'count'), Wins=('Is_Win', 'sum'), Win_Profit=('Win P/L <2%', 'sum'), Places=('Is_Place', 'sum'), Place_Profit=('Place P/L <2%', 'sum')
                             ).reset_index()
                             all_time['Period'] = 'All Time'
                             
                             curr_month_df = merged_smart[merged_smart['Month_Yr'] == current_month_str]
                             if not curr_month_df.empty:
-                                curr_month = curr_month_df.groupby(sys_col_found, observed=False).agg(
+                                curr_month = curr_month_df.groupby(actual_sys_col, observed=False).agg(
                                     Bets=('Horse', 'count'), Wins=('Is_Win', 'sum'), Win_Profit=('Win P/L <2%', 'sum'), Places=('Is_Place', 'sum'), Place_Profit=('Place P/L <2%', 'sum')
                                 ).reset_index()
                                 curr_month['Period'] = current_month_str
                             else:
-                                curr_month = all_time.copy()
+                                curr_month = pd.DataFrame({actual_sys_col: all_time[actual_sys_col].unique()})
                                 curr_month['Period'] = current_month_str
-                                curr_month[['Bets', 'Wins', 'Win_Profit', 'Places', 'Place_Profit']] = 0
+                                curr_month['Bets'] = 0
+                                curr_month['Wins'] = 0
+                                curr_month['Win_Profit'] = 0.0
+                                curr_month['Places'] = 0
+                                curr_month['Place_Profit'] = 0.0
 
                             combined = pd.concat([all_time, curr_month], ignore_index=True)
                             combined['Strike Rate (%)'] = np.where(combined['Bets'] > 0, (combined['Wins'] / combined['Bets'] * 100), 0)
@@ -1144,38 +1202,37 @@ else:
                             combined['Total P/L'] = combined['Win_Profit'] + combined['Place_Profit']
                             
                             combined['SortKey'] = np.where(combined['Period'] == 'All Time', 1, 2)
-                            combined = combined.sort_values(by=[sys_col_found, 'SortKey']).drop('SortKey', axis=1)
+                            combined = combined.sort_values(by=[actual_sys_col, 'SortKey']).drop('SortKey', axis=1)
 
                             html_table = """<style>.builder-table { border-collapse: collapse; width: 100%; min-width: 1000px; font-size: 14px; font-family: sans-serif; margin-top: 15px; } .builder-table th, .builder-table td { border: 1px solid #ccc; padding: 6px; text-align: center; white-space: nowrap; } .builder-table tr:hover { background-color: #0000FF !important; color: white !important; } .left-align { text-align: left !important; padding-left: 8px !important; }</style><div class="scrollable-table"><table class="builder-table"><thead><tr style="background-color: #1a3a5f; color: white;"><th class="left-align">System Name</th><th class="left-align">Period</th><th>Bets</th><th>Wins</th><th>Win P/L</th><th>Win SR</th><th>Places</th><th>Plc P/L</th><th>Plc SR</th><th>Total P/L</th><th>DL</th></tr></thead><tbody>"""
                             
-                            unique_sys = combined[sys_col_found].unique()
+                            unique_sys = combined[actual_sys_col].unique()
                             palette = ["#e8f4f8", "#f8e8e8", "#e8f8e8", "#f8f4e8", "#f4e8f8", "#e8f8f8"]
                             bg_colors = {sys: palette[i % len(palette)] for i, sys in enumerate(unique_sys)}
 
                             last_sys = None
                             for _, row in combined.iterrows():
-                                if last_sys is not None and last_sys != row[sys_col_found]:
+                                if last_sys is not None and last_sys != row[actual_sys_col]:
                                     html_table += '<tr><td colspan="11" style="border: none !important; background-color: white !important; height: 15px; padding: 0 !important;"></td></tr>'
-                                last_sys = row[sys_col_found]
-                                bg = bg_colors[row[sys_col_found]]
+                                last_sys = row[actual_sys_col]
+                                bg = bg_colors[row[actual_sys_col]]
                                 b_s = "<b>" if row['Period'] == 'All Time' else ""
                                 b_e = "</b>" if row['Period'] == 'All Time' else ""
                                 w_color = "#2e7d32" if row['Win_Profit'] > 0 else "#d32f2f" if row['Win_Profit'] < 0 else "black"
                                 p_color = "#2e7d32" if row['Place_Profit'] > 0 else "#d32f2f" if row['Place_Profit'] < 0 else "black"
                                 t_color = "#2e7d32" if row['Total P/L'] > 0 else "#d32f2f" if row['Total P/L'] < 0 else "black"
                                 
-                                # --- NEW: Generate row-specific CSV base64 link ---
                                 if row['Period'] == 'All Time':
-                                    sub_df = merged_smart[merged_smart[sys_col_found] == row[sys_col_found]]
+                                    sub_df = merged_smart[merged_smart[actual_sys_col] == row[actual_sys_col]]
                                 else:
-                                    sub_df = merged_smart[(merged_smart[sys_col_found] == row[sys_col_found]) & (merged_smart['Month_Yr'] == row['Period'])]
+                                    sub_df = merged_smart[(merged_smart[actual_sys_col] == row[actual_sys_col]) & (merged_smart['Month_Yr'] == row['Period'])]
                                     
                                 csv_b64 = base64.b64encode(sub_df.to_csv(index=False).encode('utf-8')).decode()
-                                safe_name = str(row[sys_col_found]).replace(' ', '_').replace('/', '-')
+                                safe_name = str(row[actual_sys_col]).replace(' ', '_').replace('/', '-')
                                 safe_per = str(row['Period']).replace(' ', '')
                                 dl_link = f'<a href="data:file/csv;base64,{csv_b64}" download="{safe_name}_{safe_per}.csv" style="text-decoration:none; font-size:16px;" title="Download selections">📥</a>'
                                 
-                                html_table += f"""<tr style="background-color: {bg};"><td class="left-align"><b>{row[sys_col_found]}</b></td><td class="left-align">{b_s}{row['Period']}{b_e}</td><td>{row['Bets']}</td><td>{row['Wins']}</td><td style="color:{w_color}; font-weight:bold;">£{row['Win_Profit']:.2f}</td><td>{row['Strike Rate (%)']:.2f}%</td><td>{row['Places']}</td><td style="color:{p_color}; font-weight:bold;">£{row['Place_Profit']:.2f}</td><td>{row['Place SR (%)']:.2f}%</td><td style="color:{t_color}; font-weight:bold;">£{row['Total P/L']:.2f}</td><td>{dl_link}</td></tr>"""
+                                html_table += f"""<tr style="background-color: {bg};"><td class="left-align"><b>{row[actual_sys_col]}</b></td><td class="left-align">{b_s}{row['Period']}{b_e}</td><td>{row['Bets']}</td><td>{row['Wins']}</td><td style="color:{w_color}; font-weight:bold;">£{row['Win_Profit']:.2f}</td><td>{row['Strike Rate (%)']:.2f}%</td><td>{row['Places']}</td><td style="color:{p_color}; font-weight:bold;">£{row['Place_Profit']:.2f}</td><td>{row['Place SR (%)']:.2f}%</td><td style="color:{t_color}; font-weight:bold;">£{row['Total P/L']:.2f}</td><td>{dl_link}</td></tr>"""
                             html_table += "</tbody></table></div>"
                             st.markdown(html_table, unsafe_allow_html=True)
                         else: st.warning("Found the file, but none of the picks had a matched race result in the database.")
