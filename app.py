@@ -1146,20 +1146,15 @@ else:
                         merged_smart = merged_smart[merged_smart['Fin Pos'] > 0]
                         
                         if not merged_smart.empty:
-                            # --- 🧠 INJECT DOUBLE-BRAIN FOR THE CSV EXPORT ---
+                            # --- 🧠 INJECT DOUBLE BRAIN DATA HERE ---
                             merged_smart = prep_system_builder_data(merged_smart, model, feats, shadow_model, shadow_feats, cal_model, is_live_today=False, use_vault=True)
                             
-                            # --- 🛡️ THE BULLETPROOF GROUPBY SHIELD ---
-                            actual_sys_col = 'System Name'
-                            if sys_col_found and sys_col_found in merged_smart.columns:
-                                merged_smart[actual_sys_col] = merged_smart[sys_col_found]
-                            elif sys_col_found and sys_col_found.strip() in merged_smart.columns:
-                                merged_smart[actual_sys_col] = merged_smart[sys_col_found.strip()]
+                            if sys_col_found is None:
+                                merged_smart['System Name'] = 'All Systems Combined'
+                                sys_col_found = 'System Name'
                             else:
-                                merged_smart[actual_sys_col] = 'All Systems Combined'
-                                
-                            merged_smart[actual_sys_col] = merged_smart[actual_sys_col].fillna('Unknown System').astype(str)
-                            # ------------------------------------------
+                                merged_smart['System Name'] = merged_smart[sys_col_found]
+                                sys_col_found = 'System Name'
 
                             merged_smart['Win P/L <2%'] = pd.to_numeric(merged_smart['Win P/L <2%'], errors='coerce').fillna(0)
                             merged_smart['Place P/L <2%'] = pd.to_numeric(merged_smart['Place P/L <2%'], errors='coerce').fillna(0)
@@ -1170,25 +1165,21 @@ else:
                             merged_smart['Month_Yr'] = merged_smart['Date_DT'].dt.strftime('%Y - %b')
                             current_month_str = datetime.now().strftime('%Y - %b')
                             
-                            all_time = merged_smart.groupby(actual_sys_col, observed=False).agg(
+                            all_time = merged_smart.groupby(sys_col_found, observed=False).agg(
                                 Bets=('Horse', 'count'), Wins=('Is_Win', 'sum'), Win_Profit=('Win P/L <2%', 'sum'), Places=('Is_Place', 'sum'), Place_Profit=('Place P/L <2%', 'sum')
                             ).reset_index()
                             all_time['Period'] = 'All Time'
                             
                             curr_month_df = merged_smart[merged_smart['Month_Yr'] == current_month_str]
                             if not curr_month_df.empty:
-                                curr_month = curr_month_df.groupby(actual_sys_col, observed=False).agg(
+                                curr_month = curr_month_df.groupby(sys_col_found, observed=False).agg(
                                     Bets=('Horse', 'count'), Wins=('Is_Win', 'sum'), Win_Profit=('Win P/L <2%', 'sum'), Places=('Is_Place', 'sum'), Place_Profit=('Place P/L <2%', 'sum')
                                 ).reset_index()
                                 curr_month['Period'] = current_month_str
                             else:
-                                curr_month = pd.DataFrame({actual_sys_col: all_time[actual_sys_col].unique()})
+                                curr_month = all_time.copy()
                                 curr_month['Period'] = current_month_str
-                                curr_month['Bets'] = 0
-                                curr_month['Wins'] = 0
-                                curr_month['Win_Profit'] = 0.0
-                                curr_month['Places'] = 0
-                                curr_month['Place_Profit'] = 0.0
+                                curr_month[['Bets', 'Wins', 'Win_Profit', 'Places', 'Place_Profit']] = 0
 
                             combined = pd.concat([all_time, curr_month], ignore_index=True)
                             combined['Strike Rate (%)'] = np.where(combined['Bets'] > 0, (combined['Wins'] / combined['Bets'] * 100), 0)
@@ -1197,20 +1188,20 @@ else:
                             combined['Total P/L'] = combined['Win_Profit'] + combined['Place_Profit']
                             
                             combined['SortKey'] = np.where(combined['Period'] == 'All Time', 1, 2)
-                            combined = combined.sort_values(by=[actual_sys_col, 'SortKey']).drop('SortKey', axis=1)
+                            combined = combined.sort_values(by=[sys_col_found, 'SortKey']).drop('SortKey', axis=1)
 
                             html_table = """<style>.builder-table { border-collapse: collapse; width: 100%; min-width: 1000px; font-size: 14px; font-family: sans-serif; margin-top: 15px; } .builder-table th, .builder-table td { border: 1px solid #ccc; padding: 6px; text-align: center; white-space: nowrap; } .builder-table tr:hover { background-color: #0000FF !important; color: white !important; } .left-align { text-align: left !important; padding-left: 8px !important; }</style><div class="scrollable-table"><table class="builder-table"><thead><tr style="background-color: #1a3a5f; color: white;"><th class="left-align">System Name</th><th class="left-align">Period</th><th>Bets</th><th>Wins</th><th>Win P/L</th><th>Win SR</th><th>Places</th><th>Plc P/L</th><th>Plc SR</th><th>Total P/L</th><th>DL</th></tr></thead><tbody>"""
                             
-                            unique_sys = combined[actual_sys_col].unique()
+                            unique_sys = combined[sys_col_found].unique()
                             palette = ["#e8f4f8", "#f8e8e8", "#e8f8e8", "#f8f4e8", "#f4e8f8", "#e8f8f8"]
                             bg_colors = {sys: palette[i % len(palette)] for i, sys in enumerate(unique_sys)}
 
                             last_sys = None
                             for _, row in combined.iterrows():
-                                if last_sys is not None and last_sys != row[actual_sys_col]:
+                                if last_sys is not None and last_sys != row[sys_col_found]:
                                     html_table += '<tr><td colspan="11" style="border: none !important; background-color: white !important; height: 15px; padding: 0 !important;"></td></tr>'
-                                last_sys = row[actual_sys_col]
-                                bg = bg_colors[row[actual_sys_col]]
+                                last_sys = row[sys_col_found]
+                                bg = bg_colors[row[sys_col_found]]
                                 b_s = "<b>" if row['Period'] == 'All Time' else ""
                                 b_e = "</b>" if row['Period'] == 'All Time' else ""
                                 w_color = "#2e7d32" if row['Win_Profit'] > 0 else "#d32f2f" if row['Win_Profit'] < 0 else "black"
@@ -1218,9 +1209,9 @@ else:
                                 t_color = "#2e7d32" if row['Total P/L'] > 0 else "#d32f2f" if row['Total P/L'] < 0 else "black"
                                 
                                 if row['Period'] == 'All Time':
-                                    sub_df = merged_smart[merged_smart[actual_sys_col] == row[actual_sys_col]]
+                                    sub_df = merged_smart[merged_smart[sys_col_found] == row[sys_col_found]]
                                 else:
-                                    sub_df = merged_smart[(merged_smart[actual_sys_col] == row[actual_sys_col]) & (merged_smart['Month_Yr'] == row['Period'])]
+                                    sub_df = merged_smart[(merged_smart[sys_col_found] == row[sys_col_found]) & (merged_smart['Month_Yr'] == row['Period'])]
                                     
                                 # --- FULL CSV DOWNLOAD WITH REORDERED DOUBLE-BRAIN COLUMNS ---
                                 base_cols = ['Date', 'Time', 'Course', 'Horse', '7:30AM Price']
@@ -1232,11 +1223,11 @@ else:
                                 
                                 final_export_cols = safe_base + safe_brain + other_cols
                                 csv_b64 = base64.b64encode(sub_df[final_export_cols].to_csv(index=False).encode('utf-8')).decode()
-                                safe_name = str(row[actual_sys_col]).replace(' ', '_').replace('/', '-')
+                                safe_name = str(row[sys_col_found]).replace(' ', '_').replace('/', '-')
                                 safe_per = str(row['Period']).replace(' ', '')
                                 dl_link = f'<a href="data:file/csv;base64,{csv_b64}" download="{safe_name}_{safe_per}.csv" style="text-decoration:none; font-size:16px;" title="Download selections">📥</a>'
                                 
-                                html_table += f"""<tr style="background-color: {bg};"><td class="left-align"><b>{row[actual_sys_col]}</b></td><td class="left-align">{b_s}{row['Period']}{b_e}</td><td>{row['Bets']}</td><td>{row['Wins']}</td><td style="color:{w_color}; font-weight:bold;">£{row['Win_Profit']:.2f}</td><td>{row['Strike Rate (%)']:.2f}%</td><td>{row['Places']}</td><td style="color:{p_color}; font-weight:bold;">£{row['Place_Profit']:.2f}</td><td>{row['Place SR (%)']:.2f}%</td><td style="color:{t_color}; font-weight:bold;">£{row['Total P/L']:.2f}</td><td>{dl_link}</td></tr>"""
+                                html_table += f"""<tr style="background-color: {bg};"><td class="left-align"><b>{row[sys_col_found]}</b></td><td class="left-align">{b_s}{row['Period']}{b_e}</td><td>{row['Bets']}</td><td>{row['Wins']}</td><td style="color:{w_color}; font-weight:bold;">£{row['Win_Profit']:.2f}</td><td>{row['Strike Rate (%)']:.2f}%</td><td>{row['Places']}</td><td style="color:{p_color}; font-weight:bold;">£{row['Place_Profit']:.2f}</td><td>{row['Place SR (%)']:.2f}%</td><td style="color:{t_color}; font-weight:bold;">£{row['Total P/L']:.2f}</td><td>{dl_link}</td></tr>"""
                             html_table += "</tbody></table></div>"
                             st.markdown(html_table, unsafe_allow_html=True)
                         else: st.warning("Found the file, but none of the picks had a matched race result in the database.")
