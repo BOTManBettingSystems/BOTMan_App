@@ -1101,7 +1101,7 @@ else:
 
             except Exception as e: st.error(f"Error loading General Systems: {e}")
                 
-        else:
+else:
             st.markdown("### 📈 Live Performance (Master file)")
             
             if st.session_state.get("is_admin"):
@@ -1125,33 +1125,31 @@ else:
                             s = str(x).split('.')[0].strip()
                             return s[-6:] if len(s) > 6 else s
                             
-                        # --- THE SURGICAL FIX FOR DATA TYPES ---
-                        # Force ODS columns to be clean strings to match the database
+                        # Force ODS columns to strings to match Database (df_all)
                         df_smart_master['Date_Key'] = df_smart_master['Date'].apply(clean_d)
                         df_smart_master['Time'] = df_smart_master['Time'].astype(str).str.split('.').str[0].str.strip()
                         df_smart_master['Course'] = df_smart_master['Course'].astype(str).str.strip().str.title()
                         df_smart_master['Horse'] = df_smart_master['Horse'].astype(str).str.strip().str.title()
                         
-                        # Use the Full Database (df_all) and force its types to match
+                        # Prepare the clean Database (df_all) copy
                         db_clean = df_all.copy()
                         db_clean['Time'] = db_clean['Time'].astype(str).str.split('.').str[0].str.strip()
                         db_clean['Course'] = db_clean['Course'].astype(str).str.strip().str.title()
                         db_clean['Horse'] = db_clean['Horse'].astype(str).str.strip().str.title()
 
-                        # Prevent column collisions (_x/_y) by only merging onto the Master ZIP data
+                        # Merge ODS keys with full database to get all 2-year results
                         keep_keys = ['Date_Key', 'Time', 'Course', 'Horse']
                         if sys_col_found: keep_keys.append(sys_col_found)
                         ods_keys_only = df_smart_master[keep_keys].copy()
                         
                         merged_smart = pd.merge(ods_keys_only, db_clean, on=['Date_Key', 'Time', 'Course', 'Horse'], how='inner')
-                        # ---------------------------------------
 
                         merged_smart['Fin Pos'] = pd.to_numeric(merged_smart['Fin Pos'], errors='coerce')
                         merged_smart = merged_smart[merged_smart['Fin Pos'] > 0]
                         
                         if not merged_smart.empty:
-                            # Run the Double-Brain math
-                            merged_smart = prep_system_builder_data(merged_smart, model, feats, shadow_model, shadow_feats, cal_model, is_live_today=False, use_vault=True)
+                            # 🛡️ FIX: use_vault=False here stops the vault from trimming dates to March 31st
+                            merged_smart = prep_system_builder_data(merged_smart, model, feats, shadow_model, shadow_feats, cal_model, is_live_today=False, use_vault=False)
                             
                             if sys_col_found is None:
                                 merged_smart['System Name'] = 'All Systems Combined'
@@ -1233,7 +1231,6 @@ else:
                     st.info("To see Admin performance tracking, please upload 'BOTManAdminMaster.ods' to the root folder.")
                 else:
                     st.info("To see live performance tracking, please upload 'BOTManSystemsMaster.ods' to the root folder.")
-
 # --- Page 4: Mini SYSTEM BUILDER ---
     elif app_mode == "🛠️ System Builder":
         # --- THE DYNAMIC RESET HACK ---
