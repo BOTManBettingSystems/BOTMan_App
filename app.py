@@ -1125,37 +1125,32 @@ else:
                             s = str(x).split('.')[0].strip()
                             return s[-6:] if len(s) > 6 else s
                             
+                        # --- THE SURGICAL FIX FOR DATA TYPES ---
+                        # Force ODS columns to be clean strings to match the database
                         df_smart_master['Date_Key'] = df_smart_master['Date'].apply(clean_d)
-                        
                         df_smart_master['Time'] = df_smart_master['Time'].astype(str).str.split('.').str[0].str.strip()
-                        df_a = df_all.copy()
-                        df_a['Time'] = df_a['Time'].astype(str).str.split('.').str[0].str.strip()
-                        
                         df_smart_master['Course'] = df_smart_master['Course'].astype(str).str.strip().str.title()
-                        df_a['Course'] = df_a['Course'].astype(str).str.strip().str.title()
-                        
                         df_smart_master['Horse'] = df_smart_master['Horse'].astype(str).str.strip().str.title()
-                        df_a['Horse'] = df_a['Horse'].astype(str).str.strip().str.title()
                         
-                        # --- THE SURGICAL FIX (PROVEN BY YOUR DEBUG SCREENSHOT) ---
-                        # We strip the ODS file down to JUST the keys and the System Name.
-                        # This prevents Pandas from creating the "_x" and "_y" columns that crash the math.
-                        keep_cols = ['Date_Key', 'Time', 'Course', 'Horse']
-                        if sys_col_found: keep_cols.append(sys_col_found)
-                        if 'Value' in df_smart_master.columns: keep_cols.append('Value')
+                        # Use the Full Database (df_all) and force its types to match
+                        db_clean = df_all.copy()
+                        db_clean['Time'] = db_clean['Time'].astype(str).str.split('.').str[0].str.strip()
+                        db_clean['Course'] = db_clean['Course'].astype(str).str.strip().str.title()
+                        db_clean['Horse'] = db_clean['Horse'].astype(str).str.strip().str.title()
+
+                        # Prevent column collisions (_x/_y) by only merging onto the Master ZIP data
+                        keep_keys = ['Date_Key', 'Time', 'Course', 'Horse']
+                        if sys_col_found: keep_keys.append(sys_col_found)
+                        ods_keys_only = df_smart_master[keep_keys].copy()
                         
-                        df_ods_clean = df_smart_master[keep_cols].copy()
-                        
-                        # Change df_a to df_all to reconnect the full 2-year history
-                        merged_smart = pd.merge(df_ods_clean, df_all, on=['Date_Key', 'Time', 'Course', 'Horse'], how='inner')
-                        # ----------------------------------------------------------
+                        merged_smart = pd.merge(ods_keys_only, db_clean, on=['Date_Key', 'Time', 'Course', 'Horse'], how='inner')
+                        # ---------------------------------------
 
                         merged_smart['Fin Pos'] = pd.to_numeric(merged_smart['Fin Pos'], errors='coerce')
                         merged_smart = merged_smart[merged_smart['Fin Pos'] > 0]
                         
                         if not merged_smart.empty:
-                            
-                            # --- INJECT DOUBLE-BRAIN MATH HERE ---
+                            # Run the Double-Brain math
                             merged_smart = prep_system_builder_data(merged_smart, model, feats, shadow_model, shadow_feats, cal_model, is_live_today=False, use_vault=True)
                             
                             if sys_col_found is None:
@@ -1222,16 +1217,7 @@ else:
                                 else:
                                     sub_df = merged_smart[(merged_smart[sys_col_found] == row[sys_col_found]) & (merged_smart['Month_Yr'] == row['Period'])]
                                     
-                                # --- CSV DOWNLOAD UPDATE ---
-                                base_cols = ['Date', 'Time', 'Course', 'Horse', '7:30AM Price']
-                                brain_cols = ['ML_Prob', 'Value Price', 'True_AI_Prob', 'Cal_Value_Price', 'Value_Edge_Perc']
-                                
-                                safe_base = [c for c in base_cols if c in sub_df.columns]
-                                safe_brain = [c for c in brain_cols if c in sub_df.columns]
-                                other_cols = [c for c in sub_df.columns if c not in safe_base and c not in safe_brain]
-                                
-                                final_export_cols = safe_base + safe_brain + other_cols
-                                csv_b64 = base64.b64encode(sub_df[final_export_cols].to_csv(index=False).encode('utf-8')).decode()
+                                csv_b64 = base64.b64encode(sub_df.to_csv(index=False).encode('utf-8')).decode()
                                 safe_name = str(row[sys_col_found]).replace(' ', '_').replace('/', '-')
                                 safe_per = str(row['Period']).replace(' ', '')
                                 dl_link = f'<a href="data:file/csv;base64,{csv_b64}" download="{safe_name}_{safe_per}.csv" style="text-decoration:none; font-size:16px;" title="Download selections">📥</a>'
