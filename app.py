@@ -1143,7 +1143,8 @@ else:
                         merged_smart = merged_smart[merged_smart['Fin Pos'] > 0]
                         
                         if not merged_smart.empty:
-                            # --- ONLY NEW LINE: Apply Double-Brain Math before saving CSV ---
+                            
+                            # --- INJECT DOUBLE-BRAIN MATH HERE ---
                             merged_smart = prep_system_builder_data(merged_smart, model, feats, shadow_model, shadow_feats, cal_model, is_live_today=False, use_vault=True)
                             
                             if sys_col_found is None:
