@@ -1126,34 +1126,33 @@ else:
                             return s[-6:] if len(s) > 6 else s
                             
                         df_smart_master['Date_Key'] = df_smart_master['Date'].apply(clean_d)
-                        df_smart_master['Time'] = df_smart_master['Time'].astype(str).str.split('.').str[0].str.strip()
-                        df_smart_master['Course'] = df_smart_master['Course'].astype(str).str.strip().str.title()
-                        df_smart_master['Horse'] = df_smart_master['Horse'].astype(str).str.strip().str.title()
                         
+                        # --- BULLETPROOF MERGE PREP ---
+                        # 1. Strip the silent ".0" floats that Pandas adds to the ODS file
+                        df_smart_master['Time'] = df_smart_master['Time'].astype(str).str.split('.').str[0].str.strip()
                         df_a = df_all.copy()
                         df_a['Time'] = df_a['Time'].astype(str).str.split('.').str[0].str.strip()
+                        
+                        # 2. Force strict Title Case to ignore upstream capitalization glitches
+                        df_smart_master['Course'] = df_smart_master['Course'].astype(str).str.strip().str.title()
                         df_a['Course'] = df_a['Course'].astype(str).str.strip().str.title()
+                        
+                        df_smart_master['Horse'] = df_smart_master['Horse'].astype(str).str.strip().str.title()
                         df_a['Horse'] = df_a['Horse'].astype(str).str.strip().str.title()
                         
-                        # --- THE SMOKING GUN FIX: PREVENTING _x AND _y MERGE CRASHES ---
-                        # We only extract the IDs and the System Name from your ODS file.
-                        # We let df_a (the database) provide the pure 7:30AM Price, BSP, and Fin Pos.
-                        # This completely stops Pandas from renaming columns and causing KeyErrors.
-                        keys_to_keep = ['Date_Key', 'Time', 'Course', 'Horse']
-                        if sys_col_found: keys_to_keep.append(sys_col_found)
-                        if 'Value' in df_smart_master.columns: keys_to_keep.append('Value')
+                        merged_smart = pd.merge(df_smart_master, df_a, on=['Date_Key', 'Time', 'Course', 'Horse'], how='inner')
+                        merged_smart = pd.merge(df_smart_master, df_a, on=['Date_Key', 'Time', 'Course', 'Horse'], how='inner')
                         
-                        ods_clean = df_smart_master[keys_to_keep].copy()
+                        # --- DEBUGGING BLOCK ---
+                        st.write("🚨 DEBUG: Columns currently inside merged_smart:")
+                        st.write(list(merged_smart.columns))
+                        st.stop()
+                        # -----------------------
                         
-                        merged_smart = pd.merge(ods_clean, df_a, on=['Date_Key', 'Time', 'Course', 'Horse'], how='inner')
                         merged_smart['Fin Pos'] = pd.to_numeric(merged_smart['Fin Pos'], errors='coerce')
                         merged_smart = merged_smart[merged_smart['Fin Pos'] > 0]
                         
                         if not merged_smart.empty:
-                            
-                            # --- INJECT DOUBLE-BRAIN MATH ---
-                            merged_smart = prep_system_builder_data(merged_smart, model, feats, shadow_model, shadow_feats, cal_model, is_live_today=False, use_vault=True)
-                            
                             if sys_col_found is None:
                                 merged_smart['System Name'] = 'All Systems Combined'
                                 sys_col_found = 'System Name'
@@ -1213,6 +1212,7 @@ else:
                                 p_color = "#2e7d32" if row['Place_Profit'] > 0 else "#d32f2f" if row['Place_Profit'] < 0 else "black"
                                 t_color = "#2e7d32" if row['Total P/L'] > 0 else "#d32f2f" if row['Total P/L'] < 0 else "black"
                                 
+                                # --- NEW: Generate row-specific CSV base64 link ---
                                 if row['Period'] == 'All Time':
                                     sub_df = merged_smart[merged_smart[sys_col_found] == row[sys_col_found]]
                                 else:
@@ -1234,6 +1234,7 @@ else:
                     st.info("To see Admin performance tracking, please upload 'BOTManAdminMaster.ods' to the root folder.")
                 else:
                     st.info("To see live performance tracking, please upload 'BOTManSystemsMaster.ods' to the root folder.")
+
 
 # --- Page 4: Mini SYSTEM BUILDER ---
     elif app_mode == "🛠️ System Builder":
