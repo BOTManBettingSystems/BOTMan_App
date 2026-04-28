@@ -1101,7 +1101,7 @@ else:
 
             except Exception as e: st.error(f"Error loading General Systems: {e}")
                 
-else:
+        else:
             st.markdown("### 📈 Live Performance (Master file)")
             
             if st.session_state.get("is_admin"):
