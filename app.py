@@ -1138,7 +1138,6 @@ else:
                         df_smart_master['Horse'] = df_smart_master['Horse'].astype(str).str.strip().str.title()
                         df_a['Horse'] = df_a['Horse'].astype(str).str.strip().str.title()
                         
-                        # Drop overlapping columns to prevent _x / _y Pandas KeyError crashes
                         overlap = [c for c in df_a.columns if c in df_smart_master.columns and c not in ['Date_Key', 'Time', 'Course', 'Horse']]
                         df_a_clean = df_a.drop(columns=overlap)
                         
@@ -1156,10 +1155,9 @@ else:
                                 merged_smart[actual_sys_col] = merged_smart[sys_col_found]
                             elif sys_col_found and sys_col_found.strip() in merged_smart.columns:
                                 merged_smart[actual_sys_col] = merged_smart[sys_col_found.strip()]
-                            elif actual_sys_col not in merged_smart.columns:
+                            else:
                                 merged_smart[actual_sys_col] = 'All Systems Combined'
                                 
-                            # Force column to strictly be strings and eliminate any NaNs prior to groupby
                             merged_smart[actual_sys_col] = merged_smart[actual_sys_col].fillna('Unknown System').astype(str)
                             # ------------------------------------------
 
@@ -1224,7 +1222,16 @@ else:
                                 else:
                                     sub_df = merged_smart[(merged_smart[actual_sys_col] == row[actual_sys_col]) & (merged_smart['Month_Yr'] == row['Period'])]
                                     
-                                csv_b64 = base64.b64encode(sub_df.to_csv(index=False).encode('utf-8')).decode()
+                                # --- FULL CSV DOWNLOAD WITH REORDERED DOUBLE-BRAIN COLUMNS ---
+                                base_cols = ['Date', 'Time', 'Course', 'Horse', '7:30AM Price']
+                                brain_cols = ['ML_Prob', 'Value Price', 'True_AI_Prob', 'Cal_Value_Price', 'Value_Edge_Perc']
+                                
+                                safe_base = [c for c in base_cols if c in sub_df.columns]
+                                safe_brain = [c for c in brain_cols if c in sub_df.columns]
+                                other_cols = [c for c in sub_df.columns if c not in safe_base and c not in safe_brain]
+                                
+                                final_export_cols = safe_base + safe_brain + other_cols
+                                csv_b64 = base64.b64encode(sub_df[final_export_cols].to_csv(index=False).encode('utf-8')).decode()
                                 safe_name = str(row[actual_sys_col]).replace(' ', '_').replace('/', '-')
                                 safe_per = str(row['Period']).replace(' ', '')
                                 dl_link = f'<a href="data:file/csv;base64,{csv_b64}" download="{safe_name}_{safe_per}.csv" style="text-decoration:none; font-size:16px;" title="Download selections">📥</a>'
