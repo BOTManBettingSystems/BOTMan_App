@@ -333,12 +333,9 @@ def prep_system_builder_data(_df, _model, feats, _shadow_model=None, shadow_feat
             b_df['True_AI_Prob'] = _cal_model.predict_proba(b_df[feats].fillna(0))[:, 1]
             b_df['Cal_Value_Price'] = np.where(b_df['True_AI_Prob'] > 0.001, 1.0 / b_df['True_AI_Prob'], 1000.0)
         
-        # Calculate Edge against the Leashed model
-        market_p = np.where(pd.to_numeric(b_df.get('BSP', 0), errors='coerce') > 0, 
-                            pd.to_numeric(b_df.get('BSP', 0), errors='coerce'), 
-                            pd.to_numeric(b_df.get('7:30AM Price', 0), errors='coerce'))
-        
-        b_df['Value_Edge_Perc'] = ((market_p / b_df['Cal_Value_Price']) - 1) * 100
+        # 🛡️ NEW: Edge is strictly locked to the 7:30AM Morning Price (ignores BSP entirely)
+        safe_morning_price = pd.to_numeric(b_df.get('7:30AM Price', 0), errors='coerce').fillna(0)
+        b_df['Value_Edge_Perc'] = np.where(b_df['Cal_Value_Price'] > 0, ((safe_morning_price / b_df['Cal_Value_Price']) - 1) * 100, 0.0)
         
         # Edge Brackets for X-Ray
         v_bins = [-np.inf, 0.0, 10.0, 20.0, np.inf]
