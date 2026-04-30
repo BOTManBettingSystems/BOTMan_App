@@ -1828,14 +1828,16 @@ else:
         
         if df_today is not None and not df_today.empty:
             ta_df = df_today.copy()
+            if 'Rank' in ta_df.columns:
+                ta_df.rename(columns={'Rank': 'AI Rank'}, inplace=True)
             
             with c_dl:
                 st.markdown("<br>", unsafe_allow_html=True)
-                dl_cols = ['Date', 'Time', 'Course', 'Horse', 'Primary Rank', 'Form Rank', 'Pure Rank']
+                dl_cols = ['Date', 'Time', 'Course', 'Horse', 'AI Rank', 'Primary Rank', 'Form Rank', 'Pure Rank']
                 avail_cols = [c for c in dl_cols if c in ta_df.columns]
                 
                 dl_df = ta_df[avail_cols].copy()
-                for col in ['Primary Rank', 'Form Rank', 'Pure Rank']:
+                for col in ['AI Rank', 'Primary Rank', 'Form Rank', 'Pure Rank']:
                     if col in dl_df.columns:
                         dl_df[col] = pd.to_numeric(dl_df[col], errors='coerce').fillna(0).astype(int)
                 
@@ -1924,8 +1926,7 @@ else:
 
                 sort_c1, sort_c2 = st.columns([2, 1])
                 
-                sort_options = ["Pure Rank", "No. of Top", "Primary Rank", "Form Rank", "Comb. Rank", "Speed Rank", "Race Rank", "Comp. Rank", "PRB Rank", "Race Rating", "7:30AM Price", "Value Price", "Total", "Speed", "Ability", "Going", "Distance", "Course/Sim", "TrainrF", "JockyF", "Draw"]
-                if show_msai: sort_options.append("MSAI Rank")
+                sort_options = ["AI Rank", "Pure Rank", "No. of Top", "Primary Rank", "Form Rank", "Comb. Rank", "Speed Rank", "Race Rank", "Comp. Rank", "PRB Rank", "Race Rating", "7:30AM Price", "Value Price", "Total", "Speed", "Ability", "Going", "Distance", "Course/Sim", "TrainrF", "JockyF", "Draw"]
                 avail_sorts = [c for c in sort_options if c in race_info.columns]
                 
                 with sort_c1:
@@ -1945,7 +1946,7 @@ else:
                 if sort_by in race_df.columns:
                     race_df[sort_by] = pd.to_numeric(race_df[sort_by], errors='coerce').fillna(999 if is_asc else -999)
                 
-                race_df = race_df.sort_values(by=[sort_by, 'Rank'], ascending=[is_asc, True])
+                race_df = race_df.sort_values(by=[sort_by, 'AI Rank'], ascending=[is_asc, True])
                 
                 def gv(r, c, num=False, default="-"):
                     v = r.get(c, default)
@@ -1988,6 +1989,7 @@ else:
                     html += f'<th rowspan="2" class="{align_class}"{col_style}>{h}</th>'
                 
                 html += '<th colspan="9" class="center-text" style="border-bottom: 1px dashed #ccc; letter-spacing: 2px; color: #a9bacd;">----------------------- FORM -----------------------</th>'
+                html += '<th rowspan="2" class="center-text" style="background-color: #1a3a5f; color: white; border-left: 2px solid white !important;">AI<br>Rank</th>'
                 html += '<th rowspan="2" class="center-text" style="background-color: #000;">Pure<br>Rank</th></tr><tr style="background-color: #1a3a5f; color: white;">'
                 
                 for h in ["Ability", "Going", "Distance", "Course/<br>Sim", "Trainer", "Jockey", "Draw", "Speed", "Total"]: 
@@ -2025,8 +2027,11 @@ else:
                     sp = fmt_2dp(gv(r, "Speed"))
                     ts = fmt_2dp(gv(r, "Total"))
                     
+                    ai_r = fmt_int(gv(r, "AI Rank"))
+                    
                     html += f'<td class="center-text">{ab}</td><td class="center-text">{go}</td><td class="center-text">{di}</td><td class="center-text">{cs}</td><td class="center-text">{tr}</td><td class="center-text">{jo}</td><td class="center-text">{dr}</td><td class="center-text">{sp}</td>'
                     html += f'<td class="center-text" style="font-weight:bold;">{ts}</td>'
+                    html += f'<td class="center-text {rc(ai_r)}" style="font-weight:bold; border-left: 2px solid #ccc;">{ai_r}</td>'
                     html += f'<td class="center-text {rc(pure_r)}" style="font-weight:bold;">{pure_r}</td>'
                     html += '</tr>'
                     
