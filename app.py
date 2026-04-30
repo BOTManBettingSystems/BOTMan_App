@@ -1331,7 +1331,14 @@ else:
 
                 c5, c6, c7, c8 = st.columns(4)
                 with c5:
-                    rank_1_only = st.checkbox("Must be AI Rank 1", value=defs.get('rank_1_only', False))
+                    ai_rank_opts = ["Any", "Rank 1", "Top 2", "Top 3", "Top 4", "Top 5"]
+                    # Handle legacy saved systems smoothly
+                    legacy_r1 = defs.get('rank_1_only', False)
+                    default_ai_rank = "Rank 1" if legacy_r1 else defs.get('ai_rank_filter', "Any")
+                    try: ai_rank_idx = ai_rank_opts.index(default_ai_rank)
+                    except ValueError: ai_rank_idx = 0
+                    
+                    ai_rank_filter = st.selectbox("AI Rank Filter", ai_rank_opts, index=ai_rank_idx)
                     sex_opts = ["c", "f", "g", "m", "h", "r", "x"]
                     safe_sex = [s for s in defs.get('sex', sex_opts) if s in sex_opts]
                     selected_sex = st.multiselect("Horse Sex", sex_opts, default=safe_sex if safe_sex else sex_opts)
@@ -1407,8 +1414,36 @@ else:
                     if st.button("Generate JSON Code", use_container_width=True):
                         if new_sys_name:
                             sys_data = {
-                                "race_types": selected_race_types, "hcap_types": selected_hcap, "price_min": price_min, "price_max": price_max, "min_prob_gap": min_prob_gap, "min_edge_perc": min_edge_perc, "rnrs": selected_rnrs, "classes": selected_classes, "cm": selected_cm, "sex": selected_sex, "courses": selected_courses, "rank_1_only": rank_1_only, "value_filter": value_filter, "irish": irish_f, "age_min": age_min, "age_max": age_max, "months": selected_months,
-                                "ranks": {"Comb. Rank": comb_f, "Comp. Rank": comp_f, "Speed Rank": speed_f, "Race Rank": race_f, "Primary Rank": primary_f, "MSAI Rank": msai_f, "PRB Rank": prb_f, "Trainer PRB Rank": tprb_f, "Jockey PRB Rank": jprb_f, "Form Rank": form_f, "Pure Rank": pure_f},
+                                "race_types": selected_race_types, 
+                                "hcap_types": selected_hcap, 
+                                "price_min": price_min, 
+                                "price_max": price_max, 
+                                "min_prob_gap": min_prob_gap, 
+                                "min_edge_perc": min_edge_perc, 
+                                "rnrs": selected_rnrs, 
+                                "classes": selected_classes, 
+                                "cm": selected_cm, 
+                                "sex": selected_sex, 
+                                "courses": selected_courses, 
+                                "ai_rank_filter": ai_rank_filter,  # <--- Here is the change
+                                "value_filter": value_filter, 
+                                "irish": irish_f, 
+                                "age_min": age_min, 
+                                "age_max": age_max, 
+                                "months": selected_months,
+                                "ranks": {
+                                    "Comb. Rank": comb_f, 
+                                    "Comp. Rank": comp_f, 
+                                    "Speed Rank": speed_f, 
+                                    "Race Rank": race_f, 
+                                    "Primary Rank": primary_f, 
+                                    "MSAI Rank": msai_f, 
+                                    "PRB Rank": prb_f, 
+                                    "Trainer PRB Rank": tprb_f, 
+                                    "Jockey PRB Rank": jprb_f, 
+                                    "Form Rank": form_f, 
+                                    "Pure Rank": pure_f
+                                },
                                 "groupby": selected_groupby
                             }
                             st.code(f'"{new_sys_name}": {json.dumps(sys_data, indent=4)}', language="json")
@@ -1463,7 +1498,12 @@ else:
                     sel_m_nums = [month_map[m] for m in selected_months]
                     mask = mask & b_df['Date_DT'].dt.month.isin(sel_m_nums)
                 
-                if rank_1_only: mask = mask & (b_df['Rank'] == 1)
+                if ai_rank_filter != "Any":
+                    if ai_rank_filter == "Rank 1": mask = mask & (b_df['Rank'] == 1)
+                    elif ai_rank_filter == "Top 2": mask = mask & (b_df['Rank'] <= 2)
+                    elif ai_rank_filter == "Top 3": mask = mask & (b_df['Rank'] <= 3)
+                    elif ai_rank_filter == "Top 4": mask = mask & (b_df['Rank'] <= 4)
+                    elif ai_rank_filter == "Top 5": mask = mask & (b_df['Rank'] <= 5)
                 
                 if "Original AI" in value_filter: 
                     v_col = 'Value Price'
@@ -1621,7 +1661,12 @@ else:
                         if len(selected_months) < 12:
                             t_mask = t_mask & t_df['Date_DT'].dt.month.isin(sel_m_nums)
 
-                        if rank_1_only: t_mask = t_mask & (t_df['Rank'] == 1)
+                        if ai_rank_filter != "Any":
+                            if ai_rank_filter == "Rank 1": t_mask = t_mask & (t_df['Rank'] == 1)
+                            elif ai_rank_filter == "Top 2": t_mask = t_mask & (t_df['Rank'] <= 2)
+                            elif ai_rank_filter == "Top 3": t_mask = t_mask & (t_df['Rank'] <= 3)
+                            elif ai_rank_filter == "Top 4": t_mask = t_mask & (t_df['Rank'] <= 4)
+                            elif ai_rank_filter == "Top 5": t_mask = t_mask & (t_df['Rank'] <= 5)
                         
                         if "Original AI" in value_filter: 
                             v_col = 'Value Price'
