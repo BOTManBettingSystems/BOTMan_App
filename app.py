@@ -551,10 +551,10 @@ if st.session_state.get("is_admin") and st.session_state.get("show_admin_insight
     
     if df_all is not None and not df_all.empty:
             
-            # --- DIAGNOSTIC CHECK ---
-            if use_vault_bool and not os.path.exists("BOTMan_Prediction_Vault.csv") and not os.path.exists("BOTMan_Prediction_Vault.zip"):
-                st.warning("🚨 **Diagnostic Alert:** The Vault file was not found on the server. The system has safely fallen back to using the Live Brain.")
-            # ------------------------
+        # --- DIAGNOSTIC CHECK ---
+        if use_vault_bool and not os.path.exists("BOTMan_Prediction_Vault.csv") and not os.path.exists("BOTMan_Prediction_Vault.zip"):
+            st.warning("🚨 **Diagnostic Alert:** The Vault file was not found on the server. The system has safely fallen back to using the Live Brain.")
+        # ------------------------
     
         ins_df = prep_system_builder_data(df_all, model, feats, shadow_model, shadow_feats, cal_model)
         
