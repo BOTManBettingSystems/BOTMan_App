@@ -203,7 +203,7 @@ def load_ods_master():
     
 # --- 6. OPTIMIZATION ENGINE FOR TAB 4 & ADMIN ---
 @st.cache_data(show_spinner=False)
-def prep_system_builder_data(_df, _model, feats, _shadow_model=None, shadow_feats=None, _cal_model=None, is_live_today=False, use_vault=True):
+def prep_system_builder_data(_df, _model, feats, _shadow_model=None, shadow_feats=None, _cal_model=None, is_live_today=False, use_vault=True, caller_id="default"):
     b_df = _df.copy()
     b_df.columns = b_df.columns.str.strip()
     
@@ -1149,7 +1149,7 @@ else:
                         
                         if not merged_smart.empty:
                             # 🛡️ FIX: use_vault=False here stops the vault from trimming dates to March 31st
-                            merged_smart = prep_system_builder_data(merged_smart, model, feats, shadow_model, shadow_feats, cal_model, is_live_today=False, use_vault=False)
+                            merged_smart = prep_system_builder_data(merged_smart, model, feats, shadow_model, shadow_feats, cal_model, is_live_today=False, use_vault=False, caller_id="live_perf")
                             
                             if sys_col_found is None:
                                 merged_smart['System Name'] = 'All Systems Combined'
@@ -1157,6 +1157,22 @@ else:
                             else:
                                 merged_smart['System Name'] = merged_smart[sys_col_found]
                                 sys_col_found = 'System Name'
+
+                            # --- 🛡️ ADMIN / PUBLIC POOL FILTER FIX ---
+                            if st.session_state.get("is_admin"):
+                                valid_systems = []
+                                if "Admin" in perf_file_choice and os.path.exists("BOTMan_admin_systems.json"):
+                                    with open("BOTMan_admin_systems.json", "r") as f:
+                                        try: valid_systems = list(json.load(f).keys())
+                                        except: pass
+                                elif "Public" in perf_file_choice and os.path.exists("BOTMan_user_systems.json"):
+                                    with open("BOTMan_user_systems.json", "r") as f:
+                                        try: valid_systems = list(json.load(f).keys())
+                                        except: pass
+                                
+                                if valid_systems:
+                                    merged_smart = merged_smart[merged_smart['System Name'].isin(valid_systems)]
+                            # ----------------------------------------
 
                             merged_smart['Win P/L <2%'] = pd.to_numeric(merged_smart['Win P/L <2%'], errors='coerce').fillna(0)
                             merged_smart['Place P/L <2%'] = pd.to_numeric(merged_smart['Place P/L <2%'], errors='coerce').fillna(0)
@@ -1267,7 +1283,7 @@ else:
         st.markdown("---")
 
         if df_all is not None and not df_all.empty:
-            b_df = prep_system_builder_data(df_all, model, feats, shadow_model, shadow_feats, cal_model, is_live_today=False, use_vault=use_vault_bool)
+            b_df = prep_system_builder_data(df_all, model, feats, shadow_model, shadow_feats, cal_model, is_live_today=False, use_vault=use_vault_bool, caller_id="sys_builder")
 
             with st.form(f"builder_form_{st.session_state.form_reset_counter}"):
                 st.markdown("### Core Filters")
