@@ -1151,28 +1151,13 @@ else:
                             # 🛡️ FIX: use_vault=False here stops the vault from trimming dates to March 31st
                             merged_smart = prep_system_builder_data(merged_smart, model, feats, shadow_model, shadow_feats, cal_model, is_live_today=False, use_vault=False, caller_id="live_perf")
                             
-                            if sys_col_found is None:
+                        if sys_col_found is None:
                                 merged_smart['System Name'] = 'All Systems Combined'
                                 sys_col_found = 'System Name'
                             else:
-                                merged_smart['System Name'] = merged_smart[sys_col_found]
+                                # Clean the system names to ensure perfect grouping
+                                merged_smart['System Name'] = merged_smart[sys_col_found].astype(str).str.strip()
                                 sys_col_found = 'System Name'
-
-                            # --- 🛡️ ADMIN / PUBLIC POOL FILTER FIX ---
-                            if st.session_state.get("is_admin"):
-                                valid_systems = []
-                                if "Admin" in perf_file_choice and os.path.exists("BOTMan_admin_systems.json"):
-                                    with open("BOTMan_admin_systems.json", "r") as f:
-                                        try: valid_systems = list(json.load(f).keys())
-                                        except: pass
-                                elif "Public" in perf_file_choice and os.path.exists("BOTMan_user_systems.json"):
-                                    with open("BOTMan_user_systems.json", "r") as f:
-                                        try: valid_systems = list(json.load(f).keys())
-                                        except: pass
-                                
-                                if valid_systems:
-                                    merged_smart = merged_smart[merged_smart['System Name'].isin(valid_systems)]
-                            # ----------------------------------------
 
                             merged_smart['Win P/L <2%'] = pd.to_numeric(merged_smart['Win P/L <2%'], errors='coerce').fillna(0)
                             merged_smart['Place P/L <2%'] = pd.to_numeric(merged_smart['Place P/L <2%'], errors='coerce').fillna(0)
