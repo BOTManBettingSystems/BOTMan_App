@@ -1149,7 +1149,7 @@ else:
                         
                         if not merged_smart.empty:
                             # 🛡️ FIX: use_vault=False here stops the vault from trimming dates to March 31st
-                            merged_smart = prep_system_builder_data(merged_smart, model, feats, shadow_model, shadow_feats, cal_model, is_live_today=False, use_vault=False, caller_id="live_perf")
+                            merged_smart = prep_system_builder_data(merged_smart, model, feats, shadow_model, shadow_feats, cal_model, is_live_today=False, use_vault=False, caller_id=target_ods)
                             
                             if sys_col_found is None:
                                 merged_smart['System Name'] = 'All Systems Combined'
@@ -1281,7 +1281,7 @@ else:
                     else:
                         min_d = datetime(2024, 1, 1).date()
                         max_d = datetime.now().date()
-                    date_range = st.date_input("Test Specific Period (From - To)", [min_d, max_d], min_value=min_d, max_value=max_d)
+                    date_range = st.date_input("Test Specific Period (From - To)", [min_d, max_d], min_value=min_d, max_value=max_d, key=f"date_picker_{use_vault_bool}")
                 
                 # --- PULL DEFAULTS FROM SAVED SYSTEM (IF LOADED) ---
                 defs = st.session_state.sys_defaults
