@@ -762,7 +762,7 @@ if st.session_state.get("is_admin") and st.session_state.get("show_admin_insight
    else:
         st.warning("No data available.")
 
-    # --- START OF NBD STATS ANALYZER ---
+# --- START OF NBD STATS ANALYZER ---
     st.markdown("---")
     st.markdown("### 📊 NBD Stats LTO Cross-Referencer")
     st.info("Analyzes today's Turf Handicaps. Finds horses that placed 2nd/3rd in a Handicap Last Time Out, and checks if their LTO Draw was historically favorable according to NBDStats.")
@@ -871,9 +871,6 @@ if st.session_state.get("is_admin") and st.session_state.get("show_admin_insight
     # --- END OF NBD STATS ANALYZER ---
 
 else:
-    # --- NORMAL DASHBOARD VIEW ---
-    with st.sidebar:
-        st.markdown("### 🧭 Main Menu")
     # --- NORMAL DASHBOARD VIEW ---
     with st.sidebar:
         st.markdown("### 🧭 Main Menu")
