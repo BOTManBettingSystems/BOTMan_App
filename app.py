@@ -759,9 +759,9 @@ if st.session_state.get("is_admin") and st.session_state.get("show_admin_insight
                     st.markdown(html_table, unsafe_allow_html=True)
             else:
                 st.info(f"No combinations found with at least {min_bets} bets.")
-    else:
+   else:
         st.warning("No data available.")
-        
+
     # --- START OF NBD STATS ANALYZER ---
     st.markdown("---")
     st.markdown("### 📊 NBD Stats LTO Cross-Referencer")
@@ -770,106 +770,110 @@ if st.session_state.get("is_admin") and st.session_state.get("show_admin_insight
     if st.button("🚀 Run NBD Cross-Reference", use_container_width=True):
         if not os.path.exists("NBDStats.csv"):
             st.error("🚨 NBDStats.csv is missing! Please upload it to the root folder.")
-            elif df_today is None or df_today.empty or df_all is None or df_all.empty:
-                st.error("🚨 Daily predictions or history data is missing. Cannot perform analysis.")
-            else:
-                with st.spinner("Analyzing 2-year history and cross-referencing NBDStats... This takes a few seconds."):
-                    try:
-                        df_nbd = pd.read_csv("NBDStats.csv")
-                        df_nbd.columns = df_nbd.columns.str.strip()
+        elif df_today is None or df_today.empty or df_all is None or df_all.empty:
+            st.error("🚨 Daily predictions or history data is missing. Cannot perform analysis.")
+        else:
+            with st.spinner("Analyzing 2-year history and cross-referencing NBDStats... This takes a few seconds."):
+                try:
+                    df_nbd = pd.read_csv("NBDStats.csv")
+                    df_nbd.columns = df_nbd.columns.str.strip()
+                    
+                    # 1. Get today's Turf Handicaps
+                    t_df = df_today.copy()
+                    t_df.columns = t_df.columns.str.strip()
+                    today_turf_hcaps = t_df[(t_df['Race Type'].str.strip() == 'Turf') & (t_df['H/Cap'].str.strip() == 'Y')].copy()
+                    
+                    # 2. Find LTO for all horses in history
+                    h_df = df_all.copy()
+                    h_df.columns = h_df.columns.str.strip()
+                    h_df['Date_Num'] = pd.to_numeric(h_df['Date'], errors='coerce')
+                    h_df = h_df.sort_values(by=['Horse', 'Date_Num', 'Time'], ascending=[True, False, False])
+                    hist_lto = h_df.drop_duplicates(subset=['Horse'], keep='first').copy()
+                    
+                    # 3. Merge Today with LTO
+                    analysis_df = pd.merge(today_turf_hcaps, hist_lto, on='Horse', how='inner', suffixes=('_Today', '_LTO'))
+                    
+                    # 4. Filter for LTO conditions (Handicap & Placed 2nd or 3rd)
+                    qualifiers = analysis_df[
+                        (analysis_df['H/Cap_LTO'].str.strip() == 'Y') & 
+                        (analysis_df['Fin Pos_LTO'].isin([2, 3, 2.0, 3.0]))
+                    ].copy()
+                    
+                    # 5. Distance conversion logic
+                    def yards_to_furlongs(yards):
+                        try: return float(yards) / 220.0
+                        except: return np.nan
+                    qualifiers['LTO_Furlongs'] = qualifiers['Distance (Yards)_LTO'].apply(yards_to_furlongs)
+                    
+                    # 6. Cross-reference Engine
+                    results = []
+                    for idx, row in qualifiers.iterrows():
+                        lto_course = str(row['Course_LTO']).strip().lower()
+                        try: lto_rnrs = int(float(row['No. of Rnrs_LTO']))
+                        except: continue
+                        lto_furlongs = row['LTO_Furlongs']
+                        lto_draw = row['Draw/Stall_LTO']
                         
-                        # 1. Get today's Turf Handicaps
-                        t_df = df_today.copy()
-                        t_df.columns = t_df.columns.str.strip()
-                        today_turf_hcaps = t_df[(t_df['Race Type'].str.strip() == 'Turf') & (t_df['H/Cap'].str.strip() == 'Y')].copy()
+                        match_course = df_nbd[df_nbd['Course'].astype(str).str.strip().str.lower() == lto_course]
+                        match_rnrs = match_course[pd.to_numeric(match_course['Runners'], errors='coerce') == lto_rnrs]
                         
-                        # 2. Find LTO for all horses in history
-                        h_df = df_all.copy()
-                        h_df.columns = h_df.columns.str.strip()
-                        h_df['Date_Num'] = pd.to_numeric(h_df['Date'], errors='coerce')
-                        h_df = h_df.sort_values(by=['Horse', 'Date_Num', 'Time'], ascending=[True, False, False])
-                        hist_lto = h_df.drop_duplicates(subset=['Horse'], keep='first').copy()
-                        
-                        # 3. Merge Today with LTO
-                        analysis_df = pd.merge(today_turf_hcaps, hist_lto, on='Horse', how='inner', suffixes=('_Today', '_LTO'))
-                        
-                        # 4. Filter for LTO conditions (Handicap & Placed 2nd or 3rd)
-                        qualifiers = analysis_df[
-                            (analysis_df['H/Cap_LTO'].str.strip() == 'Y') & 
-                            (analysis_df['Fin Pos_LTO'].isin([2, 3, 2.0, 3.0]))
-                        ].copy()
-                        
-                        # 5. Distance conversion logic
-                        def yards_to_furlongs(yards):
-                            try: return float(yards) / 220.0
-                            except: return np.nan
-                        qualifiers['LTO_Furlongs'] = qualifiers['Distance (Yards)_LTO'].apply(yards_to_furlongs)
-                        
-                        # 6. Cross-reference Engine
-                        results = []
-                        for idx, row in qualifiers.iterrows():
-                            lto_course = str(row['Course_LTO']).strip().lower()
-                            try: lto_rnrs = int(float(row['No. of Rnrs_LTO']))
+                        is_match = False
+                        for _, nbd_row in match_rnrs.iterrows():
+                            try: nbd_dist = float(nbd_row['Distance']) 
                             except: continue
-                            lto_furlongs = row['LTO_Furlongs']
-                            lto_draw = row['Draw/Stall_LTO']
                             
-                            match_course = df_nbd[df_nbd['Course'].astype(str).str.strip().str.lower() == lto_course]
-                            match_rnrs = match_course[pd.to_numeric(match_course['Runners'], errors='coerce') == lto_rnrs]
+                            # Leeway: +/- 0.5 furlongs
+                            if pd.notna(lto_furlongs) and abs(lto_furlongs - nbd_dist) <= 0.5:
+                                draw_cols = [col for col in df_nbd.columns if 'Draw' in str(col)]
+                                valid_draws = []
+                                for dc in draw_cols:
+                                    val = nbd_row[dc]
+                                    if pd.notna(val):
+                                        try: valid_draws.append(float(val))
+                                        except: pass
+                                
+                                try: lto_d_float = float(lto_draw)
+                                except: lto_d_float = -999
+                                
+                                if lto_d_float in valid_draws:
+                                    is_match = True
+                                    break
+                                    
+                        if is_match:
+                            results.append({
+                                "Today Date": row['Date_Today'],
+                                "Today Time": row['Time_Today'],
+                                "Today Course": row['Course_Today'],
+                                "Horse": row['Horse'],
+                                "Today Draw": row.get('Draw/Stall_Today', '-'),
+                                "Today Dist (Yards)": row.get('Distance (Yards)_Today', '-'),
+                                "Today 7:30AM": row.get('7:30AM Price_Today', '-'),
+                                "LTO Course": row['Course_LTO'],
+                                "LTO Pos": row['Fin Pos_LTO'],
+                                "LTO Dist (Yards)": row.get('Distance (Yards)_LTO', '-'),
+                                "LTO Rnrs": lto_rnrs,
+                                "LTO Draw": lto_draw
+                            })
                             
-                            is_match = False
-                            for _, nbd_row in match_rnrs.iterrows():
-                                try: nbd_dist = float(nbd_row['Distance']) 
-                                except: continue
-                                
-                                # Leeway: +/- 0.5 furlongs
-                                if pd.notna(lto_furlongs) and abs(lto_furlongs - nbd_dist) <= 0.5:
-                                    draw_cols = [col for col in df_nbd.columns if 'Draw' in str(col)]
-                                    valid_draws = []
-                                    for dc in draw_cols:
-                                        val = nbd_row[dc]
-                                        if pd.notna(val):
-                                            try: valid_draws.append(float(val))
-                                            except: pass
-                                    
-                                    try: lto_d_float = float(lto_draw)
-                                    except: lto_d_float = -999
-                                    
-                                    if lto_d_float in valid_draws:
-                                        is_match = True
-                                        break
-                                        
-                            if is_match:
-                                results.append({
-                                    "Today Date": row['Date_Today'],
-                                    "Today Time": row['Time_Today'],
-                                    "Today Course": row['Course_Today'],
-                                    "Horse": row['Horse'],
-                                    "Today Draw": row.get('Draw/Stall_Today', '-'),
-                                    "Today Dist (Yards)": row.get('Distance (Yards)_Today', '-'),
-                                    "Today 7:30AM": row.get('7:30AM Price_Today', '-'),
-                                    "LTO Course": row['Course_LTO'],
-                                    "LTO Pos": row['Fin Pos_LTO'],
-                                    "LTO Dist (Yards)": row.get('Distance (Yards)_LTO', '-'),
-                                    "LTO Rnrs": lto_rnrs,
-                                    "LTO Draw": lto_draw
-                                })
-                                
-                        results_df = pd.DataFrame(results)
+                    results_df = pd.DataFrame(results)
+                    
+                    if not results_df.empty:
+                        st.success(f"✅ Found {len(results_df)} horses matching all criteria!")
+                        st.dataframe(results_df, use_container_width=True, hide_index=True)
                         
-                        if not results_df.empty:
-                            st.success(f"✅ Found {len(results_df)} horses matching all criteria!")
-                            st.dataframe(results_df, use_container_width=True, hide_index=True)
-                            
-                            csv_out = results_df.to_csv(index=False).encode('utf-8')
-                            st.download_button("📥 Download NBD Qualifiers", csv_out, f"NBD_Qualifiers_{datetime.now().strftime('%d%m%y')}.csv", "text/csv")
-                        else:
-                            st.info("No horses matched the NBDStats criteria today.")
-                            
-                    except Exception as e:
-                        st.error(f"Error during NBD analysis: {e}")
-        # --- END OF NBD STATS ANALYZER ---
+                        csv_out = results_df.to_csv(index=False).encode('utf-8')
+                        st.download_button("📥 Download NBD Qualifiers", csv_out, f"NBD_Qualifiers_{datetime.now().strftime('%d%m%y')}.csv", "text/csv")
+                    else:
+                        st.info("No horses matched the NBDStats criteria today.")
+                        
+                except Exception as e:
+                    st.error(f"Error during NBD analysis: {e}")
+    # --- END OF NBD STATS ANALYZER ---
+
 else:
+    # --- NORMAL DASHBOARD VIEW ---
+    with st.sidebar:
+        st.markdown("### 🧭 Main Menu")
     # --- NORMAL DASHBOARD VIEW ---
     with st.sidebar:
         st.markdown("### 🧭 Main Menu")
