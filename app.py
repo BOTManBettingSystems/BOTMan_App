@@ -761,14 +761,15 @@ if st.session_state.get("is_admin") and st.session_state.get("show_admin_insight
                 st.info(f"No combinations found with at least {min_bets} bets.")
     else:
         st.warning("No data available.")
-        # --- START OF NBD STATS ANALYZER ---
-        st.markdown("---")
-        st.markdown("### 📊 NBD Stats LTO Cross-Referencer")
-        st.info("Analyzes today's Turf Handicaps. Finds horses that placed 2nd/3rd in a Handicap Last Time Out, and checks if their LTO Draw was historically favorable according to NBDStats.")
         
-        if st.button("🚀 Run NBD Cross-Reference", use_container_width=True):
-            if not os.path.exists("NBDStats.csv"):
-                st.error("🚨 NBDStats.csv is missing! Please upload it to the root folder.")
+    # --- START OF NBD STATS ANALYZER ---
+    st.markdown("---")
+    st.markdown("### 📊 NBD Stats LTO Cross-Referencer")
+    st.info("Analyzes today's Turf Handicaps. Finds horses that placed 2nd/3rd in a Handicap Last Time Out, and checks if their LTO Draw was historically favorable according to NBDStats.")
+    
+    if st.button("🚀 Run NBD Cross-Reference", use_container_width=True):
+        if not os.path.exists("NBDStats.csv"):
+            st.error("🚨 NBDStats.csv is missing! Please upload it to the root folder.")
             elif df_today is None or df_today.empty or df_all is None or df_all.empty:
                 st.error("🚨 Daily predictions or history data is missing. Cannot perform analysis.")
             else:
