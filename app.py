@@ -759,10 +759,10 @@ if st.session_state.get("is_admin") and st.session_state.get("show_admin_insight
                     st.markdown(html_table, unsafe_allow_html=True)
             else:
                 st.info(f"No combinations found with at least {min_bets} bets.")
-   else:
+    else:
         st.warning("No data available.")
 
-# --- START OF NBD STATS ANALYZER ---
+    # --- START OF NBD STATS ANALYZER ---
     st.markdown("---")
     st.markdown("### 📊 NBD Stats LTO Cross-Referencer")
     st.info("Analyzes today's Turf Handicaps. Finds horses that placed 2nd/3rd in a Handicap Last Time Out, and checks if their LTO Draw was historically favorable according to NBDStats.")
@@ -871,7 +871,6 @@ if st.session_state.get("is_admin") and st.session_state.get("show_admin_insight
     # --- END OF NBD STATS ANALYZER ---
 
 else:
-else:
     # --- NORMAL DASHBOARD VIEW ---
     with st.sidebar:
         st.markdown("### 🧭 Main Menu")
@@ -883,8 +882,7 @@ else:
             "🏇 Race Analysis"
         ])
 
-# --- Page 1: Daily Predictions ---
-# --- Page 1: Daily Predictions ---
+    # --- Page 1: Daily Predictions ---
     if app_mode == "📅 Daily Predictions":
         st.header("📅 Daily Top 2 Predictions")
         
@@ -969,7 +967,7 @@ else:
                             else: st.session_state.expanded_races.add(race_id)
                             st.rerun()
 
-# --- Page 2: Dashboard ---
+    # --- Page 2: Dashboard ---
     elif app_mode == "📊 AI Top 2 Results":
         if "perf_mode" not in st.session_state: st.session_state.perf_mode = "Live"
         st.markdown('<div class="filter-area">', unsafe_allow_html=True)
@@ -1032,7 +1030,7 @@ else:
                             
                             c_box = f'''<div class="pick-box" style="border: 1px solid #ccc; background: white;"><div style="background:{bg}; color:{tx}; text-align:center; font-weight:bold; font-size:12px; padding:3px;">PICK {i} ({pr})</div><div style="padding:8px; font-size:11px; line-height:1.6;"><b>Win P&L:</b> <span class="{wpl_cls}">{round(wpl, 2)}</span> | <b>S/R%:</b> {round(wsr, 1)} | <b>ROI%:</b> <span class="{wroi_cls}">{round(wroi, 1)}%</span><br><b>Place P&L:</b> <span class="{ppl_cls}">{round(ppl, 2)}</span> | <b>S/R%:</b> {round(psr, 1)} | <b>ROI%:</b> <span class="{proi_cls}">{round(proi, 1)}%</span></div></div>'''
                             st.markdown(c_box, unsafe_allow_html=True)
-                st.markdown('</div>', unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)
 
             st.markdown('<div style="background:#1a3a5f; color:white; padding:8px 15px; font-weight:bold; border-radius:4px; margin-bottom:10px;">TOTAL SYSTEM BREAKDOWN</div>', unsafe_allow_html=True)
             render_pick_card("TOTAL SYSTEM", master_tab2_df, is_main_cat=True)
@@ -1061,7 +1059,7 @@ else:
                 if track_stats:
                     top_tracks = pd.DataFrame(track_stats).sort_values('ROI%', ascending=False).head(5)
                     st.table(top_tracks.set_index('Course'))
-# --- Page 3: General Systems Dashboard ---
+    # --- Page 3: General Systems Dashboard ---
     elif app_mode == "🧠 General Systems":
         st.header("🧠 General Systems")
         
@@ -1343,7 +1341,8 @@ else:
                     st.info("To see Admin performance tracking, please upload 'BOTManAdminMaster.ods' to the root folder.")
                 else:
                     st.info("To see live performance tracking, please upload 'BOTManSystemsMaster.ods' to the root folder.")
-# --- Page 4: Mini SYSTEM BUILDER ---
+                    
+    # --- Page 4: Mini SYSTEM BUILDER ---
     elif app_mode == "🛠️ System Builder":
         # --- THE DYNAMIC RESET HACK ---
         if "form_reset_counter" not in st.session_state:
@@ -1537,7 +1536,7 @@ else:
                                 "cm": selected_cm, 
                                 "sex": selected_sex, 
                                 "courses": selected_courses, 
-                                "ai_rank_filter": ai_rank_filter,  # <--- Here is the change
+                                "ai_rank_filter": ai_rank_filter, 
                                 "value_filter": value_filter, 
                                 "irish": irish_f, 
                                 "age_min": age_min, 
@@ -1924,7 +1923,7 @@ else:
                             )
                     st.markdown(res['breakdown_html'], unsafe_allow_html=True)
     
-# --- Page 5: RACE ANALYSIS ---
+    # --- Page 5: RACE ANALYSIS ---
     elif app_mode == "🏇 Race Analysis":
         c_head, c_dl = st.columns([3, 1])
         with c_head:
