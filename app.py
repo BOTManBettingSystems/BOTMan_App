@@ -2172,6 +2172,5 @@ else:
                         if cols[idx % 10].button(btn_text, key=f"nav_{course}_{r_time}", use_container_width=True):
                             st.session_state.analysis_race = {'course': course, 'time': r_time}
                             st.rerun()
-
-        else:
+else:
             st.info("No data available for today's races.")
