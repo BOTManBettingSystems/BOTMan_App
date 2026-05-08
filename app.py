@@ -871,6 +871,7 @@ if st.session_state.get("is_admin") and st.session_state.get("show_admin_insight
     # --- END OF NBD STATS ANALYZER ---
 
 else:
+else:
     # --- NORMAL DASHBOARD VIEW ---
     with st.sidebar:
         st.markdown("### 🧭 Main Menu")
@@ -882,6 +883,7 @@ else:
             "🏇 Race Analysis"
         ])
 
+# --- Page 1: Daily Predictions ---
 # --- Page 1: Daily Predictions ---
     if app_mode == "📅 Daily Predictions":
         st.header("📅 Daily Top 2 Predictions")
