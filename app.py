@@ -765,7 +765,7 @@ if st.session_state.get("is_admin") and st.session_state.get("show_admin_insight
     # --- START OF NBD STATS ANALYZER ---
     st.markdown("---")
     st.markdown("### 📊 NBD Stats LTO Cross-Referencer")
-    st.info("Analyzes today's Turf Handicaps. Finds horses that placed 2nd/3rd in a Handicap Last Time Out, and checks if their LTO Draw was historically favorable according to NBDStats.")
+    st.info("Analyzes today's Turf Handicaps. Finds horses that placed 2nd/3rd in a Handicap Last Time Out, and checks if their LTO Draw was historically UNFAVORABLE according to NBDStats.")
     
     if st.button("🚀 Run NBD Cross-Reference", use_container_width=True):
         if not os.path.exists("NBDStats.csv"):
@@ -794,25 +794,38 @@ if st.session_state.get("is_admin") and st.session_state.get("show_admin_insight
                     analysis_df = pd.merge(today_turf_hcaps, hist_lto, on='Horse', how='inner', suffixes=('_Today', '_LTO'))
                     
                     # 4. Filter for LTO conditions (Handicap & Placed 2nd or 3rd)
+                    hcap_lto_col = 'H/Cap_LTO' if 'H/Cap_LTO' in analysis_df.columns else 'H/Cap'
+                    fin_pos_lto_col = 'Fin Pos_LTO' if 'Fin Pos_LTO' in analysis_df.columns else 'Fin Pos'
+                    
                     qualifiers = analysis_df[
-                        (analysis_df['H/Cap_LTO'].str.strip() == 'Y') & 
-                        (analysis_df['Fin Pos_LTO'].isin([2, 3, 2.0, 3.0]))
+                        (analysis_df[hcap_lto_col].str.strip() == 'Y') & 
+                        (analysis_df[fin_pos_lto_col].isin([2, 3, 2.0, 3.0]))
                     ].copy()
                     
-                    # 5. Distance conversion logic
+                    # 5. Safe Distance conversion logic
                     def yards_to_furlongs(yards):
                         try: return float(yards) / 220.0
                         except: return np.nan
-                    qualifiers['LTO_Furlongs'] = qualifiers['Distance (Yards)_LTO'].apply(yards_to_furlongs)
+                        
+                    dist_lto_col = 'Distance (Yards)_LTO' if 'Distance (Yards)_LTO' in qualifiers.columns else 'Distance (Yards)'
+                    if dist_lto_col in qualifiers.columns:
+                        qualifiers['LTO_Furlongs'] = qualifiers[dist_lto_col].apply(yards_to_furlongs)
+                    else:
+                        qualifiers['LTO_Furlongs'] = np.nan
                     
                     # 6. Cross-reference Engine
                     results = []
                     for idx, row in qualifiers.iterrows():
-                        lto_course = str(row['Course_LTO']).strip().lower()
-                        try: lto_rnrs = int(float(row['No. of Rnrs_LTO']))
+                        course_col = 'Course_LTO' if 'Course_LTO' in row else 'Course'
+                        rnrs_col = 'No. of Rnrs_LTO' if 'No. of Rnrs_LTO' in row else 'No. of Rnrs'
+                        draw_col = 'Draw/Stall_LTO' if 'Draw/Stall_LTO' in row else 'Draw/Stall'
+                        
+                        lto_course = str(row.get(course_col, '')).strip().lower()
+                        try: lto_rnrs = int(float(row.get(rnrs_col, 0)))
                         except: continue
+                        
                         lto_furlongs = row['LTO_Furlongs']
-                        lto_draw = row['Draw/Stall_LTO']
+                        lto_draw = row.get(draw_col, '-')
                         
                         match_course = df_nbd[df_nbd['Course'].astype(str).str.strip().str.lower() == lto_course]
                         match_rnrs = match_course[pd.to_numeric(match_course['Runners'], errors='coerce') == lto_rnrs]
@@ -835,22 +848,24 @@ if st.session_state.get("is_admin") and st.session_state.get("show_admin_insight
                                 try: lto_d_float = float(lto_draw)
                                 except: lto_d_float = -999
                                 
-                                if lto_d_float in valid_draws:
-                                    is_match = True
-                                    break
+                                # CHECK FOR UNFAVORABLE DRAW (Not in the valid list)
+                                if valid_draws and lto_d_float != -999:
+                                    if lto_d_float not in valid_draws:
+                                        is_match = True
+                                        break
                                     
                         if is_match:
                             results.append({
-                                "Today Date": row['Date_Today'],
-                                "Today Time": row['Time_Today'],
-                                "Today Course": row['Course_Today'],
+                                "Today Date": row.get('Date_Today', row.get('Date', '-')),
+                                "Today Time": row.get('Time_Today', row.get('Time', '-')),
+                                "Today Course": row.get('Course_Today', row.get('Course', '-')),
                                 "Horse": row['Horse'],
-                                "Today Draw": row.get('Draw/Stall_Today', '-'),
-                                "Today Dist (Yards)": row.get('Distance (Yards)_Today', '-'),
-                                "Today 7:30AM": row.get('7:30AM Price_Today', '-'),
-                                "LTO Course": row['Course_LTO'],
-                                "LTO Pos": row['Fin Pos_LTO'],
-                                "LTO Dist (Yards)": row.get('Distance (Yards)_LTO', '-'),
+                                "Today Draw": row.get('Draw/Stall_Today', row.get('Draw/Stall', '-')),
+                                "Today Dist (Yards)": row.get('Distance (Yards)_Today', row.get('Distance (Yards)', '-')),
+                                "Today 7:30AM": row.get('7:30AM Price_Today', row.get('7:30AM Price', '-')),
+                                "LTO Course": row.get(course_col, '-'),
+                                "LTO Pos": row.get(fin_pos_lto_col, '-'),
+                                "LTO Dist (Yards)": row.get(dist_lto_col, '-'),
                                 "LTO Rnrs": lto_rnrs,
                                 "LTO Draw": lto_draw
                             })
@@ -858,7 +873,7 @@ if st.session_state.get("is_admin") and st.session_state.get("show_admin_insight
                     results_df = pd.DataFrame(results)
                     
                     if not results_df.empty:
-                        st.success(f"✅ Found {len(results_df)} horses matching all criteria!")
+                        st.success(f"✅ Found {len(results_df)} horses matching all criteria (Ran from UNFAVORABLE draw LTO)!")
                         st.dataframe(results_df, use_container_width=True, hide_index=True)
                         
                         csv_out = results_df.to_csv(index=False).encode('utf-8')
