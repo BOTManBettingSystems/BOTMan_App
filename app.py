@@ -227,7 +227,6 @@ def prep_system_builder_data(_df, _model, feats, _shadow_model=None, shadow_feat
     # ---------------------------------------------------
 
     # --- THE PREDICTION VAULT BRIDGE ---
-    # 🛡️ NEW: Auto-Unzip the Vault if the compressed version is uploaded
     if os.path.exists("BOTMan_Prediction_Vault.zip") and not os.path.exists("BOTMan_Prediction_Vault.csv"):
         try:
             with zipfile.ZipFile("BOTMan_Prediction_Vault.zip", 'r') as zip_ref:
@@ -325,7 +324,6 @@ def prep_system_builder_data(_df, _model, feats, _shadow_model=None, shadow_feat
         b_df['ML_Prob'] = _model.predict_proba(b_df[feats].fillna(0))[:, 1]
         b_df['Rank'] = b_df.groupby(['Date_Key', 'Time', 'Course'])['ML_Prob'].rank(ascending=False, method='min')
         b_df['Value Price'] = 1 / b_df['ML_Prob']
-    # --- END OF VAULT BRIDGE ---
 
     # --- CALIBRATED BRAIN INTEGRATION (TRUE VALUE & EDGE) ---
     if _cal_model is not None:
@@ -333,11 +331,9 @@ def prep_system_builder_data(_df, _model, feats, _shadow_model=None, shadow_feat
             b_df['True_AI_Prob'] = _cal_model.predict_proba(b_df[feats].fillna(0))[:, 1]
             b_df['Cal_Value_Price'] = np.where(b_df['True_AI_Prob'] > 0.001, 1.0 / b_df['True_AI_Prob'], 1000.0)
         
-        # 🛡️ NEW: Edge is strictly locked to the 7:30AM Morning Price (ignores BSP entirely)
         safe_morning_price = pd.to_numeric(b_df.get('7:30AM Price', 0), errors='coerce').fillna(0)
         b_df['Value_Edge_Perc'] = np.where(b_df['Cal_Value_Price'] > 0, ((safe_morning_price / b_df['Cal_Value_Price']) - 1) * 100, 0.0)
         
-        # Edge Brackets for X-Ray
         v_bins = [-np.inf, 0.0, 10.0, 20.0, np.inf]
         v_labels = ['1. Negative Edge (<0%)', '2. Fair Value (0-10%)', '3. Value (10-20%)', '4. Deep Value (>20%)']
         b_df['Edge Bracket'] = pd.cut(b_df['Value_Edge_Perc'], bins=v_bins, labels=v_labels)
@@ -468,7 +464,6 @@ with h_col2:
         c_fast, c_slow = st.columns(2)
         with c_fast:
             if st.button("⚡ Daily Refresh", help="Instantly load new daily runners/systems", use_container_width=True):
-                # Flush the daily access logs
                 if os.path.exists("login_history.csv"):
                     os.remove("login_history.csv")
                 
@@ -495,7 +490,6 @@ if st.session_state.get("is_admin") and st.session_state.get("show_admin_insight
     # --- ADMIN INSIGHTS VIEW ---
     st.header("🔍 Admin Data Insights")
     
-    # --- NEW: Keeps the sidebar alive in Admin mode so you aren't trapped ---
     with st.sidebar:
         st.markdown("### ⚙️ Admin Mode")
         st.info("You are currently viewing the Admin Insights panel.")
@@ -503,7 +497,6 @@ if st.session_state.get("is_admin") and st.session_state.get("show_admin_insight
             st.session_state.show_admin_insights = False
             st.rerun()
     
-# --- NEW: LOGIN LOG VIEWER ---
     with st.expander("📋 View Daily App Access Logs", expanded=False):
         if os.path.exists("login_history.csv"):
             log_df = pd.read_csv("login_history.csv", names=["Date & Time", "User Type", "Session ID"])
@@ -522,12 +515,10 @@ if st.session_state.get("is_admin") and st.session_state.get("show_admin_insight
                 history_df = df_all[df_all['Fin Pos'] > 0].copy()
                 vault_df = prep_system_builder_data(history_df, model, feats, shadow_model, shadow_feats, cal_model)
                 
-                # Strip it down to just the IDs and the Double-Brain AI Opinions
                 vault_cols = ['Date', 'Time', 'Course', 'Horse', 'ML_Prob', 'Rank', 'Value Price', 'True_AI_Prob', 'Cal_Value_Price']
                 available_cols = [c for c in vault_cols if c in vault_df.columns]
                 final_vault = vault_df[available_cols]
                 
-                # Generate a compressed ZIP file to bypass upload limits
                 import io
                 zip_buffer = io.BytesIO()
                 with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED, False) as zip_file:
@@ -660,7 +651,7 @@ if st.session_state.get("is_admin") and st.session_state.get("show_admin_insight
                             res_df = res_df.sort_values(sort_col, ascending=False).head(100)
                             st.dataframe(res_df, use_container_width=True, hide_index=True)
                         else:
-                            st.warning(f"No robust combinations found. (Filtered for a strict minimum of {safe_min_bets} bets to prevent random luck). Try lowering targets.")
+                            st.warning(f"No robust combinations found. Try lowering targets.")
         else:
             st.markdown(f"### 🏆 System Analysis for {race_filter} Races")
             
@@ -687,7 +678,7 @@ if st.session_state.get("is_admin") and st.session_state.get("show_admin_insight
                 grp = grp[(grp['Strike Rate (%)'] >= min_sr) & (grp['Win ROI (%)'] >= min_roi)]
                 
                 if grp.empty:
-                    st.info(f"No factor combinations met your strict targets (Min {min_sr}% S/R and {min_roi}% ROI). Try lowering your objectives.")
+                    st.info(f"No factor combinations met your strict targets. Try lowering your objectives.")
                 else:
                     if target_metric == "Logical Grouping (By Factor)":
                         ascending_sorts = []
@@ -732,7 +723,6 @@ if st.session_state.get("is_admin") and st.session_state.get("show_admin_insight
                     
                     for _, r in grp.iterrows():
                         html_table += "<tr>"
-                        
                         for factor in selected_factors:
                             val = r[factor]
                             if isinstance(val, float):
@@ -778,54 +768,45 @@ if st.session_state.get("is_admin") and st.session_state.get("show_admin_insight
                     df_nbd = pd.read_csv("NBDStats.csv")
                     df_nbd.columns = df_nbd.columns.str.strip()
                     
-                    # 1. Get today's Turf Handicaps
                     t_df = df_today.copy()
                     t_df.columns = t_df.columns.str.strip()
                     today_turf_hcaps = t_df[(t_df['Race Type'].str.strip() == 'Turf') & (t_df['H/Cap'].str.strip() == 'Y')].copy()
                     
-                    # 2. Find LTO for all horses in history
                     h_df = df_all.copy()
                     h_df.columns = h_df.columns.str.strip()
                     h_df['Date_Num'] = pd.to_numeric(h_df['Date'], errors='coerce')
                     h_df = h_df.sort_values(by=['Horse', 'Date_Num', 'Time'], ascending=[True, False, False])
                     hist_lto = h_df.drop_duplicates(subset=['Horse'], keep='first').copy()
                     
-                    # 3. Merge Today with LTO
                     analysis_df = pd.merge(today_turf_hcaps, hist_lto, on='Horse', how='inner', suffixes=('_Today', '_LTO'))
                     
-                    # 4. Filter for LTO conditions (Handicap & Placed 2nd or 3rd)
-                    hcap_lto_col = 'H/Cap_LTO' if 'H/Cap_LTO' in analysis_df.columns else 'H/Cap'
-                    fin_pos_lto_col = 'Fin Pos_LTO' if 'Fin Pos_LTO' in analysis_df.columns else 'Fin Pos'
+                    hcap_col = 'H/Cap_LTO' if 'H/Cap_LTO' in analysis_df.columns else 'H/Cap'
+                    fin_col = 'Fin Pos_LTO' if 'Fin Pos_LTO' in analysis_df.columns else 'Fin Pos'
                     
                     qualifiers = analysis_df[
-                        (analysis_df[hcap_lto_col].str.strip() == 'Y') & 
-                        (analysis_df[fin_pos_lto_col].isin([2, 3, 2.0, 3.0]))
+                        (analysis_df[hcap_col].astype(str).str.strip() == 'Y') & 
+                        (analysis_df[fin_col].isin([2, 3, 2.0, 3.0]))
                     ].copy()
                     
-                    # 5. Safe Distance conversion logic
-                    def yards_to_furlongs(yards):
-                        try: return float(yards) / 220.0
-                        except: return np.nan
-                        
-                    dist_lto_col = 'Distance (Yards)_LTO' if 'Distance (Yards)_LTO' in qualifiers.columns else 'Distance (Yards)'
-                    if dist_lto_col in qualifiers.columns:
-                        qualifiers['LTO_Furlongs'] = qualifiers[dist_lto_col].apply(yards_to_furlongs)
+                    dist_col = 'Distance (Yards)_LTO' if 'Distance (Yards)_LTO' in qualifiers.columns else 'Distance (Yards)'
+                    if dist_col in qualifiers.columns:
+                        qualifiers['LTO_Furlongs'] = pd.to_numeric(qualifiers[dist_col], errors='coerce') / 220.0
                     else:
                         qualifiers['LTO_Furlongs'] = np.nan
                     
-                    # 6. Cross-reference Engine
                     results = []
                     for idx, row in qualifiers.iterrows():
-                        course_col = 'Course_LTO' if 'Course_LTO' in row else 'Course'
-                        rnrs_col = 'No. of Rnrs_LTO' if 'No. of Rnrs_LTO' in row else 'No. of Rnrs'
-                        draw_col = 'Draw/Stall_LTO' if 'Draw/Stall_LTO' in row else 'Draw/Stall'
-                        
-                        lto_course = str(row.get(course_col, '')).strip().lower()
-                        try: lto_rnrs = int(float(row.get(rnrs_col, 0)))
+                        def get_val(suffix_col, base_col):
+                            if suffix_col in row.index: return row[suffix_col]
+                            if base_col in row.index: return row[base_col]
+                            return '-'
+
+                        lto_course = str(get_val('Course_LTO', 'Course')).strip().lower()
+                        try: lto_rnrs = int(float(get_val('No. of Rnrs_LTO', 'No. of Rnrs')))
                         except: continue
                         
                         lto_furlongs = row['LTO_Furlongs']
-                        lto_draw = row.get(draw_col, '-')
+                        lto_draw = get_val('Draw/Stall_LTO', 'Draw/Stall')
                         
                         match_course = df_nbd[df_nbd['Course'].astype(str).str.strip().str.lower() == lto_course]
                         match_rnrs = match_course[pd.to_numeric(match_course['Runners'], errors='coerce') == lto_rnrs]
@@ -835,7 +816,6 @@ if st.session_state.get("is_admin") and st.session_state.get("show_admin_insight
                             try: nbd_dist = float(nbd_row['Distance']) 
                             except: continue
                             
-                            # Leeway: +/- 0.5 furlongs
                             if pd.notna(lto_furlongs) and abs(lto_furlongs - nbd_dist) <= 0.5:
                                 draw_cols = [col for col in df_nbd.columns if 'Draw' in str(col)]
                                 valid_draws = []
@@ -848,24 +828,23 @@ if st.session_state.get("is_admin") and st.session_state.get("show_admin_insight
                                 try: lto_d_float = float(lto_draw)
                                 except: lto_d_float = -999
                                 
-                                # CHECK FOR UNFAVORABLE DRAW (Not in the valid list)
                                 if valid_draws and lto_d_float != -999:
                                     if lto_d_float not in valid_draws:
                                         is_match = True
                                         break
-                                    
+                                        
                         if is_match:
                             results.append({
-                                "Today Date": row.get('Date_Today', row.get('Date', '-')),
-                                "Today Time": row.get('Time_Today', row.get('Time', '-')),
-                                "Today Course": row.get('Course_Today', row.get('Course', '-')),
+                                "Today Date": get_val('Date_Today', 'Date'),
+                                "Today Time": get_val('Time_Today', 'Time'),
+                                "Today Course": get_val('Course_Today', 'Course'),
                                 "Horse": row['Horse'],
-                                "Today Draw": row.get('Draw/Stall_Today', row.get('Draw/Stall', '-')),
-                                "Today Dist (Yards)": row.get('Distance (Yards)_Today', row.get('Distance (Yards)', '-')),
-                                "Today 7:30AM": row.get('7:30AM Price_Today', row.get('7:30AM Price', '-')),
-                                "LTO Course": row.get(course_col, '-'),
-                                "LTO Pos": row.get(fin_pos_lto_col, '-'),
-                                "LTO Dist (Yards)": row.get(dist_lto_col, '-'),
+                                "Today Draw": get_val('Draw/Stall_Today', 'Draw/Stall'),
+                                "Today Dist (Yards)": get_val('Distance (Yards)_Today', 'Distance (Yards)'),
+                                "Today 7:30AM": get_val('7:30AM Price_Today', '7:30AM Price'),
+                                "LTO Course": get_val('Course_LTO', 'Course'),
+                                "LTO Pos": get_val('Fin Pos_LTO', 'Fin Pos'),
+                                "LTO Dist (Yards)": get_val('Distance (Yards)_LTO', 'Distance (Yards)'),
                                 "LTO Rnrs": lto_rnrs,
                                 "LTO Draw": lto_draw
                             })
@@ -1074,6 +1053,7 @@ else:
                 if track_stats:
                     top_tracks = pd.DataFrame(track_stats).sort_values('ROI%', ascending=False).head(5)
                     st.table(top_tracks.set_index('Course'))
+                    
     # --- Page 3: General Systems Dashboard ---
     elif app_mode == "🧠 General Systems":
         st.header("🧠 General Systems")
@@ -1359,7 +1339,6 @@ else:
                     
     # --- Page 4: Mini SYSTEM BUILDER ---
     elif app_mode == "🛠️ System Builder":
-        # --- THE DYNAMIC RESET HACK ---
         if "form_reset_counter" not in st.session_state:
             st.session_state.form_reset_counter = 0
         if "sys_defaults" not in st.session_state:
@@ -1371,16 +1350,12 @@ else:
         with c_reset:
             st.markdown("<br>", unsafe_allow_html=True)
             if st.button("🔄 Reset Filters", use_container_width=True):
-                # Clear the results table from the screen
                 if 'tab4_results' in st.session_state:
                     del st.session_state['tab4_results']
-                # Clear any loaded system defaults
                 st.session_state.sys_defaults = {}
-                # Change the form ID to force a complete visual wipe
                 st.session_state.form_reset_counter += 1
                 st.rerun()
 
-        # --- THE BENCHMARK TOGGLE (ADMIN ONLY) ---
         if st.session_state.get("is_admin"):
             ai_mode = st.radio("🧠 **AI Backtest Engine (Admin Only):**", 
                               ["💾 Use Prediction Vault (Historical Reality)", "⚡ Use Today's Live Brain (Benchmark Test)"], 
@@ -1388,7 +1363,7 @@ else:
                               help="The Vault shows you what the AI predicted on the actual day. The Live Brain applies today's brand new logic to the past.")
             use_vault_bool = "Vault" in ai_mode
         else:
-            use_vault_bool = True  # Guests are completely locked into historical reality
+            use_vault_bool = True  
             
         st.markdown("---")
 
@@ -1408,7 +1383,6 @@ else:
                         max_d = datetime.now().date()
                     date_range = st.date_input("Test Specific Period (From - To)", [min_d, max_d], min_value=min_d, max_value=max_d, key=f"date_picker_{use_vault_bool}")
                 
-                # --- PULL DEFAULTS FROM SAVED SYSTEM (IF LOADED) ---
                 defs = st.session_state.sys_defaults
 
                 with m_col:
@@ -1458,7 +1432,6 @@ else:
                 c5, c6, c7, c8 = st.columns(4)
                 with c5:
                     ai_rank_opts = ["Any", "Rank 1", "Top 2", "Top 3", "Top 4", "Top 5"]
-                    # Handle legacy saved systems smoothly
                     legacy_r1 = defs.get('rank_1_only', False)
                     default_ai_rank = "Rank 1" if legacy_r1 else defs.get('ai_rank_filter', "Any")
                     try: ai_rank_idx = ai_rank_opts.index(default_ai_rank)
