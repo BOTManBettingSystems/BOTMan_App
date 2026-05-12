@@ -1619,7 +1619,7 @@ else:
                 rnr_mask = pd.Series(False, index=b_df.index)
                 if "2-7" in selected_rnrs: rnr_mask |= (b_df['No. of Rnrs'] >= 2) & (b_df['No. of Rnrs'] <= 7)
                 if "8-12" in selected_rnrs: rnr_mask |= (b_df['No. of Rnrs'] >= 8) & (b_df['No. of Rnrs'] <= 12)
-                if "13-16" in selected_rnrs: rnr_mask |= (b_df['No. of Rnrs'] >= 13) & (b_df['No. of Rnrs'] <= 16)
+                if "13-16" in selected_rnrs: rnr_mask |= (b_df['No. of Rnrs'] >= 13) & (t_df['No. of Rnrs'] <= 16)
                 if ">16" in selected_rnrs: rnr_mask |= (b_df['No. of Rnrs'] > 16)
                 mask = mask & rnr_mask
 
