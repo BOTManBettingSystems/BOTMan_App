@@ -25,7 +25,7 @@ def check_password():
     # 1. Check if the user already has a valid 30-day cookie
     auth_cookie = cookie_manager.get(cookie="botman_auth")
     
-    if auth_cookie in ["", "Guest"]:
+    if auth_cookie in ["Admin", "Guest"]:
         st.session_state["password_correct"] = True
         st.session_state["is_admin"] = (auth_cookie == "Admin")
         return True
@@ -227,6 +227,7 @@ def prep_system_builder_data(_df, _model, feats, _shadow_model=None, shadow_feat
     # ---------------------------------------------------
 
     # --- THE PREDICTION VAULT BRIDGE ---
+    # 🛡️ NEW: Auto-Unzip the Vault if the compressed version is uploaded
     if os.path.exists("BOTMan_Prediction_Vault.zip") and not os.path.exists("BOTMan_Prediction_Vault.csv"):
         try:
             with zipfile.ZipFile("BOTMan_Prediction_Vault.zip", 'r') as zip_ref:
@@ -324,6 +325,7 @@ def prep_system_builder_data(_df, _model, feats, _shadow_model=None, shadow_feat
         b_df['ML_Prob'] = _model.predict_proba(b_df[feats].fillna(0))[:, 1]
         b_df['Rank'] = b_df.groupby(['Date_Key', 'Time', 'Course'])['ML_Prob'].rank(ascending=False, method='min')
         b_df['Value Price'] = 1 / b_df['ML_Prob']
+    # --- END OF VAULT BRIDGE ---
 
     # --- CALIBRATED BRAIN INTEGRATION (TRUE VALUE & EDGE) ---
     if _cal_model is not None:
@@ -331,9 +333,11 @@ def prep_system_builder_data(_df, _model, feats, _shadow_model=None, shadow_feat
             b_df['True_AI_Prob'] = _cal_model.predict_proba(b_df[feats].fillna(0))[:, 1]
             b_df['Cal_Value_Price'] = np.where(b_df['True_AI_Prob'] > 0.001, 1.0 / b_df['True_AI_Prob'], 1000.0)
         
+        # 🛡️ NEW: Edge is strictly locked to the 7:30AM Morning Price (ignores BSP entirely)
         safe_morning_price = pd.to_numeric(b_df.get('7:30AM Price', 0), errors='coerce').fillna(0)
         b_df['Value_Edge_Perc'] = np.where(b_df['Cal_Value_Price'] > 0, ((safe_morning_price / b_df['Cal_Value_Price']) - 1) * 100, 0.0)
         
+        # Edge Brackets for X-Ray
         v_bins = [-np.inf, 0.0, 10.0, 20.0, np.inf]
         v_labels = ['1. Negative Edge (<0%)', '2. Fair Value (0-10%)', '3. Value (10-20%)', '4. Deep Value (>20%)']
         b_df['Edge Bracket'] = pd.cut(b_df['Value_Edge_Perc'], bins=v_bins, labels=v_labels)
@@ -464,6 +468,7 @@ with h_col2:
         c_fast, c_slow = st.columns(2)
         with c_fast:
             if st.button("⚡ Daily Refresh", help="Instantly load new daily runners/systems", use_container_width=True):
+                # Flush the daily access logs
                 if os.path.exists("login_history.csv"):
                     os.remove("login_history.csv")
                 
@@ -490,6 +495,7 @@ if st.session_state.get("is_admin") and st.session_state.get("show_admin_insight
     # --- ADMIN INSIGHTS VIEW ---
     st.header("🔍 Admin Data Insights")
     
+    # --- NEW: Keeps the sidebar alive in Admin mode so you aren't trapped ---
     with st.sidebar:
         st.markdown("### ⚙️ Admin Mode")
         st.info("You are currently viewing the Admin Insights panel.")
@@ -497,6 +503,7 @@ if st.session_state.get("is_admin") and st.session_state.get("show_admin_insight
             st.session_state.show_admin_insights = False
             st.rerun()
     
+# --- NEW: LOGIN LOG VIEWER ---
     with st.expander("📋 View Daily App Access Logs", expanded=False):
         if os.path.exists("login_history.csv"):
             log_df = pd.read_csv("login_history.csv", names=["Date & Time", "User Type", "Session ID"])
@@ -515,10 +522,12 @@ if st.session_state.get("is_admin") and st.session_state.get("show_admin_insight
                 history_df = df_all[df_all['Fin Pos'] > 0].copy()
                 vault_df = prep_system_builder_data(history_df, model, feats, shadow_model, shadow_feats, cal_model)
                 
+                # Strip it down to just the IDs and the Double-Brain AI Opinions
                 vault_cols = ['Date', 'Time', 'Course', 'Horse', 'ML_Prob', 'Rank', 'Value Price', 'True_AI_Prob', 'Cal_Value_Price']
                 available_cols = [c for c in vault_cols if c in vault_df.columns]
                 final_vault = vault_df[available_cols]
                 
+                # Generate a compressed ZIP file to bypass upload limits
                 import io
                 zip_buffer = io.BytesIO()
                 with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED, False) as zip_file:
@@ -651,7 +660,7 @@ if st.session_state.get("is_admin") and st.session_state.get("show_admin_insight
                             res_df = res_df.sort_values(sort_col, ascending=False).head(100)
                             st.dataframe(res_df, use_container_width=True, hide_index=True)
                         else:
-                            st.warning(f"No robust combinations found. Try lowering targets.")
+                            st.warning(f"No robust combinations found. (Filtered for a strict minimum of {safe_min_bets} bets to prevent random luck). Try lowering targets.")
         else:
             st.markdown(f"### 🏆 System Analysis for {race_filter} Races")
             
@@ -678,7 +687,7 @@ if st.session_state.get("is_admin") and st.session_state.get("show_admin_insight
                 grp = grp[(grp['Strike Rate (%)'] >= min_sr) & (grp['Win ROI (%)'] >= min_roi)]
                 
                 if grp.empty:
-                    st.info(f"No factor combinations met your strict targets. Try lowering your objectives.")
+                    st.info(f"No factor combinations met your strict targets (Min {min_sr}% S/R and {min_roi}% ROI). Try lowering your objectives.")
                 else:
                     if target_metric == "Logical Grouping (By Factor)":
                         ascending_sorts = []
@@ -723,6 +732,7 @@ if st.session_state.get("is_admin") and st.session_state.get("show_admin_insight
                     
                     for _, r in grp.iterrows():
                         html_table += "<tr>"
+                        
                         for factor in selected_factors:
                             val = r[factor]
                             if isinstance(val, float):
@@ -751,119 +761,6 @@ if st.session_state.get("is_admin") and st.session_state.get("show_admin_insight
                 st.info(f"No combinations found with at least {min_bets} bets.")
     else:
         st.warning("No data available.")
-
-    # --- START OF NBD STATS ANALYZER ---
-    st.markdown("---")
-    st.markdown("### 📊 NBD Stats LTO Cross-Referencer")
-    st.info("Analyzes today's Turf Handicaps. Finds horses that placed 2nd/3rd in a Handicap Last Time Out, and checks if their LTO Draw was historically UNFAVORABLE according to NBDStats.")
-    
-    if st.button("🚀 Run NBD Cross-Reference", use_container_width=True):
-        if not os.path.exists("NBDStats.csv"):
-            st.error("🚨 NBDStats.csv is missing! Please upload it to the root folder.")
-        elif df_today is None or df_today.empty or df_all is None or df_all.empty:
-            st.error("🚨 Daily predictions or history data is missing. Cannot perform analysis.")
-        else:
-            with st.spinner("Analyzing 2-year history and cross-referencing NBDStats... This takes a few seconds."):
-                try:
-                    df_nbd = pd.read_csv("NBDStats.csv")
-                    df_nbd.columns = df_nbd.columns.str.strip()
-                    
-                    t_df = df_today.copy()
-                    t_df.columns = t_df.columns.str.strip()
-                    today_turf_hcaps = t_df[(t_df['Race Type'].str.strip() == 'Turf') & (t_df['H/Cap'].str.strip() == 'Y')].copy()
-                    
-                    h_df = df_all.copy()
-                    h_df.columns = h_df.columns.str.strip()
-                    h_df['Date_Num'] = pd.to_numeric(h_df['Date'], errors='coerce')
-                    h_df = h_df.sort_values(by=['Horse', 'Date_Num', 'Time'], ascending=[True, False, False])
-                    hist_lto = h_df.drop_duplicates(subset=['Horse'], keep='first').copy()
-                    
-                    analysis_df = pd.merge(today_turf_hcaps, hist_lto, on='Horse', how='inner', suffixes=('_Today', '_LTO'))
-                    
-                    hcap_col = 'H/Cap_LTO' if 'H/Cap_LTO' in analysis_df.columns else 'H/Cap'
-                    fin_col = 'Fin Pos_LTO' if 'Fin Pos_LTO' in analysis_df.columns else 'Fin Pos'
-                    
-                    qualifiers = analysis_df[
-                        (analysis_df[hcap_col].astype(str).str.strip() == 'Y') & 
-                        (analysis_df[fin_col].isin([2, 3, 2.0, 3.0]))
-                    ].copy()
-                    
-                    dist_col = 'Distance (Yards)_LTO' if 'Distance (Yards)_LTO' in qualifiers.columns else 'Distance (Yards)'
-                    if dist_col in qualifiers.columns:
-                        qualifiers['LTO_Furlongs'] = pd.to_numeric(qualifiers[dist_col], errors='coerce') / 220.0
-                    else:
-                        qualifiers['LTO_Furlongs'] = np.nan
-                    
-                    results = []
-                    for idx, row in qualifiers.iterrows():
-                        def get_val(suffix_col, base_col):
-                            if suffix_col in row.index: return row[suffix_col]
-                            if base_col in row.index: return row[base_col]
-                            return '-'
-
-                        lto_course = str(get_val('Course_LTO', 'Course')).strip().lower()
-                        try: lto_rnrs = int(float(get_val('No. of Rnrs_LTO', 'No. of Rnrs')))
-                        except: continue
-                        
-                        lto_furlongs = row['LTO_Furlongs']
-                        lto_draw = get_val('Draw/Stall_LTO', 'Draw/Stall')
-                        
-                        match_course = df_nbd[df_nbd['Course'].astype(str).str.strip().str.lower() == lto_course]
-                        match_rnrs = match_course[pd.to_numeric(match_course['Runners'], errors='coerce') == lto_rnrs]
-                        
-                        is_match = False
-                        for _, nbd_row in match_rnrs.iterrows():
-                            try: nbd_dist = float(nbd_row['Distance']) 
-                            except: continue
-                            
-                            if pd.notna(lto_furlongs) and abs(lto_furlongs - nbd_dist) <= 0.5:
-                                draw_cols = [col for col in df_nbd.columns if 'Draw' in str(col)]
-                                valid_draws = []
-                                for dc in draw_cols:
-                                    val = nbd_row[dc]
-                                    if pd.notna(val):
-                                        try: valid_draws.append(float(val))
-                                        except: pass
-                                
-                                try: lto_d_float = float(lto_draw)
-                                except: lto_d_float = -999
-                                
-                                if valid_draws and lto_d_float != -999:
-                                    if lto_d_float not in valid_draws:
-                                        is_match = True
-                                        break
-                                        
-                        if is_match:
-                            results.append({
-                                "Today Date": get_val('Date_Today', 'Date'),
-                                "Today Time": get_val('Time_Today', 'Time'),
-                                "Today Course": get_val('Course_Today', 'Course'),
-                                "Horse": row['Horse'],
-                                "Today Draw": get_val('Draw/Stall_Today', 'Draw/Stall'),
-                                "Today Dist (Yards)": get_val('Distance (Yards)_Today', 'Distance (Yards)'),
-                                "Today 7:30AM": get_val('7:30AM Price_Today', '7:30AM Price'),
-                                "LTO Course": get_val('Course_LTO', 'Course'),
-                                "LTO Pos": get_val('Fin Pos_LTO', 'Fin Pos'),
-                                "LTO Dist (Yards)": get_val('Distance (Yards)_LTO', 'Distance (Yards)'),
-                                "LTO Rnrs": lto_rnrs,
-                                "LTO Draw": lto_draw
-                            })
-                            
-                    results_df = pd.DataFrame(results)
-                    
-                    if not results_df.empty:
-                        st.success(f"✅ Found {len(results_df)} horses matching all criteria (Ran from UNFAVORABLE draw LTO)!")
-                        st.dataframe(results_df, use_container_width=True, hide_index=True)
-                        
-                        csv_out = results_df.to_csv(index=False).encode('utf-8')
-                        st.download_button("📥 Download NBD Qualifiers", csv_out, f"NBD_Qualifiers_{datetime.now().strftime('%d%m%y')}.csv", "text/csv")
-                    else:
-                        st.info("No horses matched the NBDStats criteria today.")
-                        
-                except Exception as e:
-                    st.error(f"Error during NBD analysis: {e}")
-    # --- END OF NBD STATS ANALYZER ---
-
 else:
     # --- NORMAL DASHBOARD VIEW ---
     with st.sidebar:
@@ -876,7 +773,7 @@ else:
             "🏇 Race Analysis"
         ])
 
-    # --- Page 1: Daily Predictions ---
+# --- Page 1: Daily Predictions ---
     if app_mode == "📅 Daily Predictions":
         st.header("📅 Daily Top 2 Predictions")
         
@@ -961,7 +858,7 @@ else:
                             else: st.session_state.expanded_races.add(race_id)
                             st.rerun()
 
-    # --- Page 2: Dashboard ---
+# --- Page 2: Dashboard ---
     elif app_mode == "📊 AI Top 2 Results":
         if "perf_mode" not in st.session_state: st.session_state.perf_mode = "Live"
         st.markdown('<div class="filter-area">', unsafe_allow_html=True)
@@ -1024,7 +921,7 @@ else:
                             
                             c_box = f'''<div class="pick-box" style="border: 1px solid #ccc; background: white;"><div style="background:{bg}; color:{tx}; text-align:center; font-weight:bold; font-size:12px; padding:3px;">PICK {i} ({pr})</div><div style="padding:8px; font-size:11px; line-height:1.6;"><b>Win P&L:</b> <span class="{wpl_cls}">{round(wpl, 2)}</span> | <b>S/R%:</b> {round(wsr, 1)} | <b>ROI%:</b> <span class="{wroi_cls}">{round(wroi, 1)}%</span><br><b>Place P&L:</b> <span class="{ppl_cls}">{round(ppl, 2)}</span> | <b>S/R%:</b> {round(psr, 1)} | <b>ROI%:</b> <span class="{proi_cls}">{round(proi, 1)}%</span></div></div>'''
                             st.markdown(c_box, unsafe_allow_html=True)
-            st.markdown('</div>', unsafe_allow_html=True)
+                st.markdown('</div>', unsafe_allow_html=True)
 
             st.markdown('<div style="background:#1a3a5f; color:white; padding:8px 15px; font-weight:bold; border-radius:4px; margin-bottom:10px;">TOTAL SYSTEM BREAKDOWN</div>', unsafe_allow_html=True)
             render_pick_card("TOTAL SYSTEM", master_tab2_df, is_main_cat=True)
@@ -1053,8 +950,7 @@ else:
                 if track_stats:
                     top_tracks = pd.DataFrame(track_stats).sort_values('ROI%', ascending=False).head(5)
                     st.table(top_tracks.set_index('Course'))
-                    
-    # --- Page 3: General Systems Dashboard ---
+# --- Page 3: General Systems Dashboard ---
     elif app_mode == "🧠 General Systems":
         st.header("🧠 General Systems")
         
@@ -1336,9 +1232,9 @@ else:
                     st.info("To see Admin performance tracking, please upload 'BOTManAdminMaster.ods' to the root folder.")
                 else:
                     st.info("To see live performance tracking, please upload 'BOTManSystemsMaster.ods' to the root folder.")
-                    
-    # --- Page 4: Mini SYSTEM BUILDER ---
+# --- Page 4: Mini SYSTEM BUILDER ---
     elif app_mode == "🛠️ System Builder":
+        # --- THE DYNAMIC RESET HACK ---
         if "form_reset_counter" not in st.session_state:
             st.session_state.form_reset_counter = 0
         if "sys_defaults" not in st.session_state:
@@ -1350,12 +1246,16 @@ else:
         with c_reset:
             st.markdown("<br>", unsafe_allow_html=True)
             if st.button("🔄 Reset Filters", use_container_width=True):
+                # Clear the results table from the screen
                 if 'tab4_results' in st.session_state:
                     del st.session_state['tab4_results']
+                # Clear any loaded system defaults
                 st.session_state.sys_defaults = {}
+                # Change the form ID to force a complete visual wipe
                 st.session_state.form_reset_counter += 1
                 st.rerun()
 
+        # --- THE BENCHMARK TOGGLE (ADMIN ONLY) ---
         if st.session_state.get("is_admin"):
             ai_mode = st.radio("🧠 **AI Backtest Engine (Admin Only):**", 
                               ["💾 Use Prediction Vault (Historical Reality)", "⚡ Use Today's Live Brain (Benchmark Test)"], 
@@ -1363,7 +1263,7 @@ else:
                               help="The Vault shows you what the AI predicted on the actual day. The Live Brain applies today's brand new logic to the past.")
             use_vault_bool = "Vault" in ai_mode
         else:
-            use_vault_bool = True  
+            use_vault_bool = True  # Guests are completely locked into historical reality
             
         st.markdown("---")
 
@@ -1383,6 +1283,7 @@ else:
                         max_d = datetime.now().date()
                     date_range = st.date_input("Test Specific Period (From - To)", [min_d, max_d], min_value=min_d, max_value=max_d, key=f"date_picker_{use_vault_bool}")
                 
+                # --- PULL DEFAULTS FROM SAVED SYSTEM (IF LOADED) ---
                 defs = st.session_state.sys_defaults
 
                 with m_col:
@@ -1432,6 +1333,7 @@ else:
                 c5, c6, c7, c8 = st.columns(4)
                 with c5:
                     ai_rank_opts = ["Any", "Rank 1", "Top 2", "Top 3", "Top 4", "Top 5"]
+                    # Handle legacy saved systems smoothly
                     legacy_r1 = defs.get('rank_1_only', False)
                     default_ai_rank = "Rank 1" if legacy_r1 else defs.get('ai_rank_filter', "Any")
                     try: ai_rank_idx = ai_rank_opts.index(default_ai_rank)
@@ -1524,7 +1426,7 @@ else:
                                 "cm": selected_cm, 
                                 "sex": selected_sex, 
                                 "courses": selected_courses, 
-                                "ai_rank_filter": ai_rank_filter, 
+                                "ai_rank_filter": ai_rank_filter,  # <--- Here is the change
                                 "value_filter": value_filter, 
                                 "irish": irish_f, 
                                 "age_min": age_min, 
@@ -1619,7 +1521,7 @@ else:
                 rnr_mask = pd.Series(False, index=b_df.index)
                 if "2-7" in selected_rnrs: rnr_mask |= (b_df['No. of Rnrs'] >= 2) & (b_df['No. of Rnrs'] <= 7)
                 if "8-12" in selected_rnrs: rnr_mask |= (b_df['No. of Rnrs'] >= 8) & (b_df['No. of Rnrs'] <= 12)
-                if "13-16" in selected_rnrs: rnr_mask |= (b_df['No. of Rnrs'] >= 13) & (t_df['No. of Rnrs'] <= 16)
+                if "13-16" in selected_rnrs: rnr_mask |= (b_df['No. of Rnrs'] >= 13) & (b_df['No. of Rnrs'] <= 16)
                 if ">16" in selected_rnrs: rnr_mask |= (b_df['No. of Rnrs'] > 16)
                 mask = mask & rnr_mask
 
@@ -1911,7 +1813,7 @@ else:
                             )
                     st.markdown(res['breakdown_html'], unsafe_allow_html=True)
     
-    # --- Page 5: RACE ANALYSIS ---
+# --- Page 5: RACE ANALYSIS ---
     elif app_mode == "🏇 Race Analysis":
         c_head, c_dl = st.columns([3, 1])
         with c_head:
@@ -2158,5 +2060,6 @@ else:
                         if cols[idx % 10].button(btn_text, key=f"nav_{course}_{r_time}", use_container_width=True):
                             st.session_state.analysis_race = {'course': course, 'time': r_time}
                             st.rerun()
+
         else:
             st.info("No data available for today's races.")
