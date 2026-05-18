@@ -1720,6 +1720,8 @@ else:
                         if 'Age' in t_df.columns: t_mask = t_mask & (t_df['Age'] >= age_min) & (t_df['Age'] <= age_max)
                         if 'Sex' in t_df.columns and selected_sex: t_mask = t_mask & t_df['Sex'].astype(str).str.strip().str.lower().isin([s.lower() for s in selected_sex])
                         if 'Course' in t_df.columns and selected_courses: t_mask = t_mask & t_df['Course'].astype(str).str.strip().isin(selected_courses)
+                        if 'Trainer' in t_df.columns and selected_trainers: t_mask = t_mask & t_df['Trainer'].astype(str).str.strip().isin(selected_trainers)
+                        if 'Jockey' in t_df.columns and selected_jockeys: t_mask = t_mask & t_df['Jockey'].astype(str).str.strip().isin(selected_jockeys)
 
                         if t_irish_col and irish_f != "Any":
                             t_irish_series = t_df[t_irish_col].astype(str).str.strip().str.upper()
