@@ -1036,6 +1036,8 @@ else:
 
                                 if 'Sex' in t_df.columns and s_data.get('sex'): s_mask &= t_df['Sex'].astype(str).str.strip().str.lower().isin([s.lower() for s in s_data['sex']])
                                 if 'Course' in t_df.columns and s_data.get('courses'): s_mask &= t_df['Course'].astype(str).str.strip().isin(s_data['courses'])
+                                if 'Trainer' in t_df.columns and s_data.get('trainers'): s_mask &= t_df['Trainer'].astype(str).str.strip().isin(s_data['trainers'])
+                                if 'Jockey' in t_df.columns and s_data.get('jockeys'): s_mask &= t_df['Jockey'].astype(str).str.strip().isin(s_data['jockeys'])
 
                                 ranks = s_data.get('ranks', {})
                                 for col_name, setting in ranks.items():
@@ -1360,11 +1362,31 @@ else:
                     irish_f = st.selectbox("Irish Race", ir_opts, index=ir_idx)
                 with c8: 
                     age_min, age_max = st.slider("Horse Age Range", 1, 20, (int(defs.get('age_min', 1)), int(defs.get('age_max', 20))), 1)
+
+                # --- NEW: TRAINER & JOCKEY ROW ---
+                c9, c10 = st.columns(2)
+                with c9:
+                    if 'Trainer' in b_df.columns:
+                        trainer_opts = sorted([str(x).strip() for x in b_df['Trainer'].dropna().unique() if str(x).strip()])
+                        safe_trainers = [t for t in defs.get('trainers', []) if t in trainer_opts]
+                        selected_trainers = st.multiselect("🏇 Specific Trainer(s)", trainer_opts, default=safe_trainers)
+                    else:
+                        st.multiselect("🏇 Specific Trainer(s)", ["Not Found in Data"], disabled=True)
+                        selected_trainers = []
+                with c10:
+                    if 'Jockey' in b_df.columns:
+                        jockey_opts = sorted([str(x).strip() for x in b_df['Jockey'].dropna().unique() if str(x).strip()])
+                        safe_jockeys = [j for j in defs.get('jockeys', []) if j in jockey_opts]
+                        selected_jockeys = st.multiselect("🏇 Specific Jockey(s)", jockey_opts, default=safe_jockeys)
+                    else:
+                        st.multiselect("🏇 Specific Jockey(s)", ["Not Found in Data"], disabled=True)
+                        selected_jockeys = []
                 
                 st.markdown("### 📊 Display Options")
                 
                 master_group_opts = [
                     'Race Type', 'H/Cap', 'Price Bracket', 'Edge Bracket', 'Month_Yr', 'Course', 
+                    'Trainer', 'Jockey', # <--- ADD THESE TWO
                     'Class', 'Class Move', 'No. of Rnrs', 'Age', 'Sex', 'Irish?', 'Irish',
                     'Comb. Rank', 'Comp. Rank', 'Speed Rank', 'Race Rank', 
                     'Primary Rank', 'Form Rank', 'Pure Rank', 'MSAI Rank', 
@@ -1426,7 +1448,9 @@ else:
                                 "cm": selected_cm, 
                                 "sex": selected_sex, 
                                 "courses": selected_courses, 
-                                "ai_rank_filter": ai_rank_filter,  # <--- Here is the change
+                                "trainers": selected_trainers, 
+                                "jockeys": selected_jockeys,   
+                                "ai_rank_filter": ai_rank_filter,
                                 "value_filter": value_filter, 
                                 "irish": irish_f, 
                                 "age_min": age_min, 
@@ -1530,6 +1554,9 @@ else:
                 if 'Age' in b_df.columns: mask = mask & (b_df['Age'] >= age_min) & (b_df['Age'] <= age_max)
                 if 'Sex' in b_df.columns and selected_sex: mask = mask & b_df['Sex'].astype(str).str.strip().str.lower().isin([s.lower() for s in selected_sex])
                 if 'Course' in b_df.columns and selected_courses: mask = mask & b_df['Course'].astype(str).str.strip().isin(selected_courses)
+                if 'Trainer' in b_df.columns and selected_trainers: mask = mask & b_df['Trainer'].astype(str).str.strip().isin(selected_trainers)
+                if 'Jockey' in b_df.columns and selected_jockeys: mask = mask & b_df['Jockey'].astype(str).str.strip().isin(selected_jockeys)
+                    
 
                 t_irish_col = 'Irish?' if 'Irish?' in b_df.columns else 'Irish' if 'Irish' in b_df.columns else None
                 if t_irish_col and irish_f != "Any":
