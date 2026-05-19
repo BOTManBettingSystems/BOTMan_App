@@ -1058,9 +1058,9 @@ else:
                             final_df = pd.concat(all_today_picks, ignore_index=True)
                             
                             if pool_choice == "Public":
-                                ideal_base_cols = ["Date", "Time", "Course", "Horse", "Trainer", "Jockey", "7:30AM Price", "ML_Prob", "Rank", "No. of Top", "System Name"]
+                                ideal_base_cols = ["Date", "Time", "Course", "Horse", "7:30AM Price", "ML_Prob", "Rank", "No. of Top", "System Name"]
                             else:
-                                ideal_base_cols = ["Date", "Time", "Course", "Horse", "Trainer", "Jockey", "7:30AM Price", "ML_Prob", "Rank", "Primary Rank", "Pure Rank", "No. of Top", "System Name"]
+                                ideal_base_cols = ["Date", "Time", "Course", "Horse", "7:30AM Price", "ML_Prob", "Rank", "Primary Rank", "Pure Rank", "No. of Top", "System Name"]
                                 
                             existing_cols = [c for c in ideal_base_cols if c in final_df.columns]
                             final_df = final_df[existing_cols]
