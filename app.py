@@ -69,23 +69,34 @@ def load_all_data():
     try:
         import urllib.request
         import io
-
         # 1. Check if local file is missing OR is a broken GitHub LFS pointer
         if not os.path.exists("DailyAIResults.zip") or not zipfile.is_zipfile("DailyAIResults.zip"):
-            # Bypass Google Drive's virus scan warning to get the actual file
             import requests
+            import re
+            
             file_id = "1U4t5t3pXAejx7cIfra3tzytB7uWL8uMZ"
             url = "https://drive.google.com/uc?export=download"
             
             session = requests.Session()
             response = session.get(url, params={'id': file_id}, stream=True)
             
-            # Look for the virus warning token and confirm the download
+            # Step A: Look for token in cookies
+            token = None
             for key, value in response.cookies.items():
                 if key.startswith('download_warning'):
-                    response = session.get(url, params={'id': file_id, 'confirm': value}, stream=True)
+                    token = value
                     break
-                    
+            
+            # Step B: If Google hid it in the HTML, extract it
+            if not token:
+                match = re.search(r'confirm=([a-zA-Z0-9_-]+)', response.text)
+                if match:
+                    token = match.group(1)
+            
+            # Step C: Submit the token to force the actual zip download
+            if token:
+                response = session.get(url, params={'id': file_id, 'confirm': token}, stream=True)
+                
             zip_source = io.BytesIO(response.content)
             z_file = zipfile.ZipFile(zip_source, 'r')
         else:
