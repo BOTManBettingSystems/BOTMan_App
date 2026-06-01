@@ -312,9 +312,9 @@ def prep_system_builder_data(_df, _model, feats, _shadow_model=None, shadow_feat
                 
                 if 'True_AI_Prob_vault' in b_df.columns:
                     b_df['True_AI_Prob'] = b_df['True_AI_Prob_vault'].fillna(b_df['True_AI_Prob'])
-                    
+                                    
                 if 'Cal_Value_Price_vault' in b_df.columns:
-                    b_df['Cal_Value_Price'] = b_df['Cal_Value_Price_vault'].fillna(np.where(b_df['True_AI_Prob'] > 0.001, 1.0 / b_df['True_AI_Prob'], 1000.0))
+                    b_df['Cal_Value_Price'] = b_df['Cal_Value_Price_vault'].fillna(pd.Series(np.where(b_df['True_AI_Prob'] > 0.001, 1.0 / b_df['True_AI_Prob'], 1000.0), index=b_df.index))
                 else:
                     b_df['Cal_Value_Price'] = np.where(b_df['True_AI_Prob'] > 0.001, 1.0 / b_df['True_AI_Prob'], 1000.0)
             
