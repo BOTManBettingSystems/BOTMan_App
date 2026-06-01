@@ -72,13 +72,21 @@ def load_all_data():
 
         # 1. Check if local file is missing OR is a broken GitHub LFS pointer
         if not os.path.exists("DailyAIResults.zip") or not zipfile.is_zipfile("DailyAIResults.zip"):
-            # Bypass GitHub and stream directly from Google Drive
+            # Bypass Google Drive's virus scan warning to get the actual file
+            import requests
             file_id = "1U4t5t3pXAejx7cIfra3tzytB7uWL8uMZ"
-            url = f"https://drive.google.com/uc?export=download&id={file_id}"
+            url = "https://drive.google.com/uc?export=download"
             
-            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-            response = urllib.request.urlopen(req)
-            zip_source = io.BytesIO(response.read())
+            session = requests.Session()
+            response = session.get(url, params={'id': file_id}, stream=True)
+            
+            # Look for the virus warning token and confirm the download
+            for key, value in response.cookies.items():
+                if key.startswith('download_warning'):
+                    response = session.get(url, params={'id': file_id, 'confirm': value}, stream=True)
+                    break
+                    
+            zip_source = io.BytesIO(response.content)
             z_file = zipfile.ZipFile(zip_source, 'r')
         else:
             # Normal Route: Open the healthy local file
