@@ -67,10 +67,25 @@ if not check_password(): st.stop()
 @st.cache_resource(show_spinner=False)
 def load_all_data():
     try:
-        if not os.path.exists("DailyAIResults.zip"): 
-            return [None]*11
-        
-        with zipfile.ZipFile("DailyAIResults.zip", 'r') as z:
+        import urllib.request
+        import io
+
+        # 1. Check if local file is missing OR is a broken GitHub LFS pointer
+        if not os.path.exists("DailyAIResults.zip") or not zipfile.is_zipfile("DailyAIResults.zip"):
+            # Bypass GitHub and stream directly from Google Drive
+            file_id = "1U4t5t3pXAejx7cIfra3tzytB7uWL8uMZ"
+            url = f"https://drive.google.com/uc?export=download&id={file_id}"
+            
+            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+            response = urllib.request.urlopen(req)
+            zip_source = io.BytesIO(response.read())
+            z_file = zipfile.ZipFile(zip_source, 'r')
+        else:
+            # Normal Route: Open the healthy local file
+            z_file = zipfile.ZipFile("DailyAIResults.zip", 'r')
+            
+        # 2. Extract and read the CSV contents exactly like before
+        with z_file as z:
             csv_name = [f for f in z.namelist() if f.endswith('.csv')][0]
             with z.open(csv_name) as f:
                 df_all = pd.read_csv(f)
