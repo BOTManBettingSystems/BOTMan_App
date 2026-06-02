@@ -67,41 +67,10 @@ if not check_password(): st.stop()
 @st.cache_resource(show_spinner=False)
 def load_all_data():
     try:
-        import urllib.request
         import io
-        # 1. Check if local file is missing OR is a broken GitHub LFS pointer
-        if not os.path.exists("DailyAIResults.zip") or not zipfile.is_zipfile("DailyAIResults.zip"):
-            import requests
-            import re
-            
-            file_id = "1U4t5t3pXAejx7cIfra3tzytB7uWL8uMZ"
-            url = "https://drive.google.com/uc?export=download"
-            
-            session = requests.Session()
-            response = session.get(url, params={'id': file_id}, stream=True)
-            
-            # Step A: Look for token in cookies
-            token = None
-            for key, value in response.cookies.items():
-                if key.startswith('download_warning'):
-                    token = value
-                    break
-            
-            # Step B: If Google hid it in the HTML, extract it
-            if not token:
-                match = re.search(r'confirm=([a-zA-Z0-9_-]+)', response.text)
-                if match:
-                    token = match.group(1)
-            
-            # Step C: Submit the token to force the actual zip download
-            if token:
-                response = session.get(url, params={'id': file_id, 'confirm': token}, stream=True)
-                
-            zip_source = io.BytesIO(response.content)
-            z_file = zipfile.ZipFile(zip_source, 'r')
-        else:
-            # Normal Route: Open the healthy local file
-            z_file = zipfile.ZipFile("DailyAIResults.zip", 'r')
+
+        # 1. Open the healthy local file directly (GitHub LFS is now unlocked!)
+        z_file = zipfile.ZipFile("DailyAIResults.zip", 'r')
             
         # 2. Extract and read the CSV contents exactly like before
         with z_file as z:
