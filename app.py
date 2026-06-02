@@ -196,6 +196,7 @@ def load_all_data():
         return clf, feats, shadow_clf, shadow_feats, cal_clf, df_historic, df_live, df_today, last_live, first_hist, df_all
     except Exception as e: 
         print(f"Error loading data: {e}")
+        st.error(f"Internal Python Error: {e}")
         return [None]*11
 
 @st.cache_data(show_spinner=False)
