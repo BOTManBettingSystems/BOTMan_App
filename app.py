@@ -195,15 +195,7 @@ def load_all_data():
         
         return clf, feats, shadow_clf, shadow_feats, cal_clf, df_historic, df_live, df_today, last_live, first_hist, df_all
     except Exception as e: 
-        import os
-        try:
-            f_size = os.path.getsize("DailyAIResults.zip")
-            f_size_mb = f_size / (1024 * 1024)
-            size_msg = f"{f_size_mb:.2f} MB"
-        except Exception:
-            size_msg = "Could not read size"
-            
-        st.error(f"Python Error: {e} | Actual size given to Python: {size_msg}")
+        print(f"Error loading data: {e}")
         return [None]*11
 
 @st.cache_data(show_spinner=False)
