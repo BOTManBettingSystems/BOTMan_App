@@ -5,4 +5,5 @@ scikit-learn
 pandas
 streamlit
 odfpy
+psutil
 extra-streamlit-components
