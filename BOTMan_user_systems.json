@@ -1286,7 +1286,7 @@
         "Pure Rank": "Any"
     }
 },
-"Acca Ssytem 5": {
+"Acca System 5": {
     "race_types": [
         "Chase"
     ],
@@ -1777,6 +1777,82 @@
         "Race Type",
         "H/Cap",
         "Price Bracket"
+    ]
+},
+"MW AOB Non Handicaps (with Jockeys)": {
+    "race_types": [
+        "Turf"
+    ],
+    "hcap_types": [
+        "N"
+    ],
+    "price_min": 0.0,
+    "price_max": 17.0,
+    "min_prob_gap": -1.0,
+    "min_edge_perc": -100.0,
+    "rnrs": [
+        "2-7",
+        "8-12",
+        "13-16",
+        ">16"
+    ],
+    "classes": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+    ],
+    "cm": [
+        "S",
+        "D",
+        "U"
+    ],
+    "sex": [
+        "c",
+        "f",
+        "g",
+        "m",
+        "h",
+        "r",
+        "x"
+    ],
+    "courses": [],
+    "trainers": [
+        "A P O'Brien"
+    ],
+    "jockeys": [
+        "Ryan Moore",
+        "Wayne Lordan",
+        "Jack Cleary"
+    ],
+    "ai_rank_filter": "Any",
+    "value_filter": "Off",
+    "irish": "Y (Yes)",
+    "age_min": 2,
+    "age_max": 4,
+    "months": [
+        "Jun",
+        "Jul",
+        "Aug",
+        "Sep"
+    ],
+    "ranks": {
+        "Comb. Rank": "Any",
+        "Comp. Rank": "Any",
+        "Speed Rank": "Any",
+        "Race Rank": "Any",
+        "Primary Rank": "Any",
+        "MSAI Rank": "Any",
+        "PRB Rank": "Any",
+        "Trainer PRB Rank": "Any",
+        "Jockey PRB Rank": "Any",
+        "Form Rank": "Any",
+        "Pure Rank": "Any"
+    },
+    "groupby": [
+        "Month_Yr"
     ]
 }
 }
