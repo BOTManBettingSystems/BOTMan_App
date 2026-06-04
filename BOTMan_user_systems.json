@@ -1787,7 +1787,7 @@
         "N"
     ],
     "price_min": 0.0,
-    "price_max": 17.0,
+    "price_max": 10.0,
     "min_prob_gap": -1.0,
     "min_edge_perc": -100.0,
     "rnrs": [
@@ -1824,8 +1824,7 @@
     ],
     "jockeys": [
         "Ryan Moore",
-        "Wayne Lordan",
-        "Jack Cleary"
+        "Wayne Lordan"
     ],
     "ai_rank_filter": "Any",
     "value_filter": "Off",
@@ -1835,8 +1834,7 @@
     "months": [
         "Jun",
         "Jul",
-        "Aug",
-        "Sep"
+        "Aug"
     ],
     "ranks": {
         "Comb. Rank": "Any",
@@ -1852,7 +1850,7 @@
         "Pure Rank": "Any"
     },
     "groupby": [
-        "Month_Yr"
+        "Price Bracket"
     ]
 }
 }
