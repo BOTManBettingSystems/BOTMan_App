@@ -68,16 +68,24 @@ if not check_password(): st.stop()
 def load_all_data():
     try:
         import io
-
-        # 1. Open the healthy local file directly (GitHub LFS is now unlocked!)
-        z_file = zipfile.ZipFile("DailyAIResults.zip", 'r')
+        import zipfile
+        import os
+        
+        # --- THE SMART LOADER ---
+        if os.path.exists("DailyAIResults.csv"):
+            # 1. Try to read the raw CSV directly
+            df_all = pd.read_csv("DailyAIResults.csv", low_memory=False)
+        elif os.path.exists("DailyAIResults.zip"):
+            # 2. If no CSV, safely open the ZIP (Bypasses Git LFS traps)
+            with zipfile.ZipFile("DailyAIResults.zip", 'r') as z:
+                # Ignore hidden Mac folders
+                csv_name = [f for f in z.namelist() if f.endswith('.csv') and '__MACOSX' not in f][0]
+                with z.open(csv_name) as f:
+                    # utf-8-sig drops invisible characters from headers
+                    df_all = pd.read_csv(f, encoding='utf-8-sig', low_memory=False)
+        else:
+            raise FileNotFoundError("Could not find DailyAIResults.csv OR DailyAIResults.zip")
             
-        # 2. Extract and read the CSV contents exactly like before
-        with z_file as z:
-            csv_name = [f for f in z.namelist() if f.endswith('.csv')][0]
-            with z.open(csv_name) as f:
-                df_all = pd.read_csv(f)
-                
         df_all.columns = df_all.columns.str.strip()
         
         def clean_date(x):
@@ -106,13 +114,17 @@ def load_all_data():
         df_historic = df_all[df_all['Date_DT'] <= split_date].copy()
         df_live = None
         
+        # --- SAFE ODS READER ---
         if os.path.exists("BOTManAIPredictionsMaster.ods"):
-            df_ods = pd.read_excel("BOTManAIPredictionsMaster.ods", engine="odf")
-            df_ods.columns = df_ods.columns.str.strip()
-            df_ods['Date_Key'] = df_ods['Date'].apply(clean_date)
-            ods_keys = df_ods[['Date_Key', 'Time', 'Course', 'Horse', 'Rank']].copy()
-            live_res_pool = df_all[df_all['Date_DT'] > split_date]
-            df_live = pd.merge(ods_keys, live_res_pool, on=['Date_Key', 'Time', 'Course', 'Horse'], how='inner')
+            try:
+                df_ods = pd.read_excel("BOTManAIPredictionsMaster.ods", engine="odf")
+                df_ods.columns = df_ods.columns.str.strip()
+                df_ods['Date_Key'] = df_ods['Date'].apply(clean_date)
+                ods_keys = df_ods[['Date_Key', 'Time', 'Course', 'Horse', 'Rank']].copy()
+                live_res_pool = df_all[df_all['Date_DT'] > split_date]
+                df_live = pd.merge(ods_keys, live_res_pool, on=['Date_Key', 'Time', 'Course', 'Horse'], how='inner')
+            except Exception as ods_err:
+                print(f"Skipped ODS file due to Git LFS pointer issue: {ods_err}")
                 
         # --- MODEL LOADING (HUGGING FACE VERSION-SAFE DOUBLE BRAIN) ---
         model_file = "botman_models.pkl"
@@ -128,7 +140,7 @@ def load_all_data():
                         shadow_clf = saved_models['shadow_clf']
                         cal_clf = saved_models['cal_clf']
                     else:
-                        force_retrain = True # Old file found, missing 3rd brain
+                        force_retrain = True 
             except Exception:
                 force_retrain = True
         else:
@@ -138,7 +150,6 @@ def load_all_data():
             clf = HistGradientBoostingClassifier(max_iter=100, learning_rate=0.08, max_depth=5, l2_regularization=2.0, random_state=42)
             shadow_clf = HistGradientBoostingClassifier(max_iter=100, learning_rate=0.08, max_depth=5, l2_regularization=2.0, random_state=42)
             
-            # THE LEASHED PRICER: High L2, shallow depth, large leaf requirements
             cal_clf = HistGradientBoostingClassifier(
                 max_iter=100, 
                 learning_rate=0.05, 
@@ -168,25 +179,21 @@ def load_all_data():
             if 'MSAI Rank' not in df_today.columns: df_today['MSAI Rank'] = 0
             df_today['MSAI Rank'] = pd.to_numeric(df_today['MSAI Rank'], errors='coerce').fillna(0)
             
-            # THE SPEED FIX: Pre-calculate everything here so tabs load instantly
             missing_feats = [f for f in feats if f not in df_today.columns]
             if not missing_feats:
                 df_today['ML_Prob'] = clf.predict_proba(df_today[feats].fillna(0))[:, 1]
                 df_today['Rank'] = df_today.groupby(['Time', 'Course'])['ML_Prob'].rank(ascending=False, method='min')
                 df_today['Value Price'] = 1 / df_today['ML_Prob']
                 
-                # Calibrated Value for Today
                 if cal_clf is not None:
                     df_today['True_AI_Prob'] = cal_clf.predict_proba(df_today[feats].fillna(0))[:, 1]
                     df_today['Cal_Value_Price'] = np.where(df_today['True_AI_Prob'] > 0.001, 1.0 / df_today['True_AI_Prob'], 1000.0)
 
-                # Pre-calculate pure ranks using the shadow model
                 missing_shadow = [f for f in shadow_feats if f not in df_today.columns]
                 if not missing_shadow:
                     df_today['Shadow_Prob'] = shadow_clf.predict_proba(df_today[shadow_feats].fillna(0))[:, 1]
                     df_today['Pure Rank'] = df_today.groupby(['Time', 'Course'])['Shadow_Prob'].rank(ascending=False, method='min')
                 
-                # Pre-calculate the gap for value finding
                 df_today['Rank2_Prob'] = df_today.groupby(['Time', 'Course'])['ML_Prob'].transform(lambda x: x.nlargest(2).iloc[-1] if len(x) > 1 else 0)
                 df_today['Prob Gap'] = df_today['ML_Prob'] - df_today['Rank2_Prob']
                 
@@ -195,7 +202,7 @@ def load_all_data():
         
         return clf, feats, shadow_clf, shadow_feats, cal_clf, df_historic, df_live, df_today, last_live, first_hist, df_all
     except Exception as e: 
-        print(f"Error loading data: {e}")
+        st.error(f"🚨 THE EXACT ENGINE CRASH REASON IS: {str(e)}")
         return [None]*11
 
 @st.cache_data(show_spinner=False)
@@ -445,7 +452,7 @@ model, feats, shadow_model, shadow_feats, cal_model, df_hist, df_live, df_today,
 
 # --- CRITICAL FIX: Ensure app doesn't crash if data is missing ---
 if model is None:
-    st.error("🚨 Critical Error: Could not load the DailyAIResults.zip data file. Please ensure it is uploaded.")
+    st.error("🚨 Critical Error: Data files failed to load. Please check file integrity (CSV/ODS/ZIP).")
     st.stop()
 
 if 'expanded_races' not in st.session_state: st.session_state.expanded_races = set()
