@@ -13,13 +13,7 @@ jobs:
         with:
           fetch-depth: 0
           lfs: true
-
-      - name: Install and Initialize Git LFS
-        run: |
-          sudo apt-get update
-          sudo apt-get install git-lfs
-          git lfs install
-
+          
       - name: Push to hub
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
