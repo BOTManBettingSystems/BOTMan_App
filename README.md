@@ -1,5 +1,5 @@
 ---
-title: Racing Apps
+title: BOTMan Betting Systems app
 emoji: 🐎
 colorFrom: green
 colorTo: blue
